@@ -1,7 +1,7 @@
 # Changes
 
 In-flight change proposals. Empty means no change is being worked on right now
-(see `BACKLOG.md` for what is queued).
+(see `BACKLOG.csv` for what is queued).
 
 ## New change
 

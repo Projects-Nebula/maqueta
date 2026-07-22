@@ -229,8 +229,7 @@ docker compose up --build
 
 - `CHANGELOG.md` — what shipped, by version.
 - `BACKLOG.csv` — pending work and known limitations, structured for
-  filtering (status/area/category/verification/blocked_by); `BACKLOG.md` is
-  the human-readable narrative version of the same data.
+  filtering (status/area/category/verification/blocked_by).
 - `openspec/specs/` — current capability specs (source of truth for behavior).
 - `openspec/changes/` — in-flight change proposals (delta specs).
 - Session memory: `~/.claude/projects/-home-sebitcode-projects-maqueta/memory/`.

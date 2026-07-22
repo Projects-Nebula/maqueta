@@ -45,4 +45,4 @@ The system SHALL <behavior>.
 ## Starting a session
 
 Read `project.md`, then the relevant `specs/<capability>/spec.md`, then check
-`changes/` for anything in flight. `BACKLOG.md` (repo root) lists what is next.
+`changes/` for anything in flight. `BACKLOG.csv` (repo root) lists what is next.

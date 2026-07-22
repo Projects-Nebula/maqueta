@@ -9,7 +9,7 @@ architecture (Section 1) without flagging it loudly in your final report.
 
 **Definition of done**: every phase in Section 4 checked off, every test in
 Section 9 passing, the manual verification checklist in Section 10 run for
-real (browser, not just unit tests), `BACKLOG.md` and `AGENTS.md` updated,
+real (browser, not just unit tests), `BACKLOG.csv` and `AGENTS.md` updated,
 one commit per phase (see `work-unit-commits` convention already used in
 this repo's git history — `git log --oneline` shows the pattern: one
 focused commit per feature, Conventional Commits, no
@@ -27,13 +27,13 @@ then compiled into a `<style>` tag client-side by
 
 Two concrete pains this refactor solves:
 
-1. **Wizard generation reliability** (see `BACKLOG.md`'s "Pending" section,
+1. **Wizard generation reliability** (see `BACKLOG.csv`'s "Pending" section,
    item 1). Full-document generation asks the model to emit complete
    `{selector, declarations}` objects for every class it invents — verbose,
    token-heavy, and the model periodically drops content generating it under
    load. Tailwind utility classes are short, finite, known strings — much
    less output per element, much lower truncation risk.
-2. **Ongoing allowlist maintenance** (see `BACKLOG.md` — "Expand the CSS
+2. **Ongoing allowlist maintenance** (see `BACKLOG.csv` — "Expand the CSS
    property allowlist" is explicitly open-ended/never-done). A structured,
    finite Tailwind-class allowlist (Section 3) is more bounded than an
    open-ended CSS property/value combinatorial space.
@@ -794,7 +794,7 @@ styling now inline on the node via `class`.
 ## 6. Explicitly out of scope
 
 Do not do these as part of this refactor — they are separate concerns,
-flag them as new `BACKLOG.md` items instead if they come up:
+flag them as new `BACKLOG.csv` items instead if they come up:
 
 - **Automatic conversion** of existing `styles.rules`-based documents into
   Tailwind classes. Legacy content keeps rendering via the legacy path
