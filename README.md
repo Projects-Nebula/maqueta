@@ -162,7 +162,7 @@ logged in is all that is needed — no key or connection step.
 
 You can also attach images (step 3 or 4) — they're resized/re-encoded
 server-side and made available for the AI to place in the generated page
-(`state.assets`, never AI-authored directly — see `BACKLOG.md`).
+(`state.assets`, never AI-authored directly — see `BACKLOG.csv`).
 
 ## Security notes
 

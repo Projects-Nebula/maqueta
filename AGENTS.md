@@ -100,6 +100,8 @@ stream, not a single JSON blob, when parsing it.
 
 - `openspec/project.md` — stack, layout, commands, non-obvious gotchas.
 - `CHANGELOG.md` — what shipped.
-- `BACKLOG.md` — known limitations and prioritized pending work.
+- `BACKLOG.csv` — known limitations and pending work, structured for
+  filtering (status/area/category/verification/blocked_by); `BACKLOG.md` is
+  the human-readable narrative version of the same data.
 - `openspec/specs/` / `openspec/changes/` — capability specs and in-flight
   change proposals.
