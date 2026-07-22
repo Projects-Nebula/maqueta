@@ -186,7 +186,10 @@ class WizardGenerateView(APIView):
             outcome = "success"
             try:
                 for kind, value in WizardAIService().stream_generate_document(
-                    data["description"], data["answers"], data.get("history", [])
+                    data["description"],
+                    data["answers"],
+                    data.get("history", []),
+                    assets=data.get("assets", []),
                 ):
                     if kind == "reasoning":
                         yield sse_event("reasoning", {"text": value})

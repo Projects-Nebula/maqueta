@@ -115,16 +115,58 @@ def test_keyframes_must_be_empty():
         sanitize_document(doc)
 
 
-def test_components_and_assets_must_be_empty():
+def test_components_must_be_empty():
     doc = copy.deepcopy(VALID_DOCUMENT)
     doc["components"] = {"card": {}}
     with pytest.raises(DocumentValidationError):
         sanitize_document(doc)
 
-    doc2 = copy.deepcopy(VALID_DOCUMENT)
-    doc2["assets"] = {"logo": "https://example.com/logo.png"}
+
+def test_valid_asset_entry_passes():
+    doc = copy.deepcopy(VALID_DOCUMENT)
+    doc["assets"] = {
+        "logo": {"url": "/media/wizard-uploads/2024/01/logo.jpg", "width": 200, "height": 100}
+    }
+    sanitize_document(doc)
+
+
+def test_asset_external_url_rejected():
+    doc = copy.deepcopy(VALID_DOCUMENT)
+    doc["assets"] = {"logo": {"url": "https://example.com/logo.png", "width": 200, "height": 100}}
     with pytest.raises(DocumentValidationError):
-        sanitize_document(doc2)
+        sanitize_document(doc)
+
+
+def test_asset_dangling_keys_rejected():
+    doc = copy.deepcopy(VALID_DOCUMENT)
+    doc["assets"] = {
+        "logo": {
+            "url": "/media/wizard-uploads/2024/01/logo.jpg",
+            "width": 200,
+            "height": 100,
+            "extra": "nope",
+        }
+    }
+    with pytest.raises(DocumentValidationError):
+        sanitize_document(doc)
+
+
+def test_asset_invalid_dimensions_rejected():
+    doc = copy.deepcopy(VALID_DOCUMENT)
+    doc["assets"] = {
+        "logo": {"url": "/media/wizard-uploads/2024/01/logo.jpg", "width": 0, "height": 100}
+    }
+    with pytest.raises(DocumentValidationError):
+        sanitize_document(doc)
+
+
+def test_too_many_assets_rejected():
+    doc = copy.deepcopy(VALID_DOCUMENT)
+    doc["assets"] = {
+        f"img{i}": {"url": "/media/x.jpg", "width": 10, "height": 10} for i in range(21)
+    }
+    with pytest.raises(DocumentValidationError):
+        sanitize_document(doc)
 
 
 def test_unexpected_top_level_key_rejected():

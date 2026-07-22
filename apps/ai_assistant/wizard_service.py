@@ -165,7 +165,9 @@ class WizardAIService:
                 ),
             )
 
-    def stream_generate_document(self, description: str, answers: dict, history: list):
+    def stream_generate_document(
+        self, description: str, answers: dict, history: list, assets: list | None = None
+    ):
         """Yield ("reasoning", text) chunks from both phases, then a final
         ("done", WizardDocumentResult).
 
@@ -182,10 +184,17 @@ class WizardAIService:
         name = ""
         summary = ""
         skeleton = None
+        available_images = [
+            {"url": a["url"], "width": a["width"], "height": a["height"]} for a in (assets or [])
+        ]
         for kind, value in self._provider.stream_generate(
             system_prompt=WIZARD_DOCUMENT_STRUCTURE_PROMPT,
             history=history,
-            payload={"description": description, "answers": answers},
+            payload={
+                "description": description,
+                "answers": answers,
+                "available_images": available_images,
+            },
             schema=WIZARD_DOCUMENT_STRUCTURE_JSON_SCHEMA,
         ):
             if kind == "reasoning":
@@ -203,13 +212,20 @@ class WizardAIService:
             logger.debug("wizard structure call returned no document: %r", skeleton)
             raise DocumentValidationError("missing document structure")
 
-        # These two are always exactly {} — no image-upload feature exists
-        # yet for the model to ever have real content for them. Force them
-        # rather than trust the model to keep echoing back an always-empty
-        # boilerplate value: it reliably omits it under load, which used to
-        # fail the whole generation over nothing worth generating.
+        # No components feature exists yet — force empty rather than trust
+        # the model to keep echoing back an always-empty boilerplate value:
+        # it reliably omits it under load, which used to fail the whole
+        # generation over nothing worth generating.
         skeleton["components"] = {}
-        skeleton["assets"] = {}
+        # Built server-side from the user's own already-uploaded, already
+        # validated images — never from the model's own JSON, so a
+        # malformed/hallucinated entry here can't happen by construction.
+        # The model only ever picks a URL from this same list to put in an
+        # <img src>; it never authors the assets registry itself.
+        skeleton["assets"] = {
+            f"asset-{i}": {"url": img["url"], "width": img["width"], "height": img["height"]}
+            for i, img in enumerate(available_images)
+        }
 
         body = (skeleton.get("document") or {}).get("body")
 

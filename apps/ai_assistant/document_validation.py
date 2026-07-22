@@ -15,10 +15,12 @@ the injection surface sanitize.py's node-tree checks are designed to close.
 from __future__ import annotations
 
 from .sanitize import (
+    MAX_ASSETS,
     MAX_MEDIA_QUERIES,
     MAX_STYLE_RULES,
     MAX_STYLE_VARIABLES,
     SanitizationError,
+    check_asset_entry,
     check_css_declaration,
     check_css_media_query,
     check_css_selector,
@@ -197,11 +199,16 @@ def _validate(state: dict) -> None:
 
     _check_styles(state.get("styles", {}))
 
-    # No image-upload feature yet (phase 2) — nothing legitimate can populate
-    # these, so any non-empty value means the AI hallucinated content it
-    # shouldn't reference.
+    # No components feature yet — nothing legitimate can populate this, so
+    # any non-empty value means the AI hallucinated content it shouldn't
+    # reference.
     _require(state.get("components") == {}, "components must be empty")
-    _require(state.get("assets") == {}, "assets must be empty")
+
+    assets = state.get("assets", {})
+    _require(isinstance(assets, dict), "assets must be an object")
+    _require(len(assets) <= MAX_ASSETS, "too many assets")
+    for asset_id, entry in assets.items():
+        check_asset_entry(asset_id, entry)
 
 
 def sanitize_document(state: dict) -> None:

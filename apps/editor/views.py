@@ -1,22 +1,34 @@
 import uuid
 
 from django.contrib.auth.decorators import login_required
+from django.core.files.base import ContentFile
 from django.db.models import Max
 from django.shortcuts import render
 from django.views.decorators.cache import never_cache
 from django.views.decorators.csrf import ensure_csrf_cookie
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
+from rest_framework.parsers import MultiPartParser
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.throttling import ScopedRateThrottle
+from rest_framework.views import APIView
 
 from apps.projects.models import Project
 
-from .models import Template, UserTemplate, UserTemplateRevision
-from .serializers import UserTemplateRevisionSerializer, UserTemplateSerializer
+from .image_processing import ImageProcessingError, process_upload
+from .models import Template, UploadedAsset, UserTemplate, UserTemplateRevision
+from .serializers import (
+    UploadedAssetSerializer,
+    UserTemplateRevisionSerializer,
+    UserTemplateSerializer,
+)
 
 # History grows unbounded otherwise — keep the most recent N per template.
 REVISION_RETENTION_LIMIT = 20
+
+# Per-user cap on stored wizard uploads (disk use, not just request cost).
+MAX_UPLOADED_ASSETS_PER_USER = 50
 
 
 @never_cache
@@ -142,3 +154,37 @@ class UserTemplateViewSet(viewsets.ModelViewSet):
         if not deleted:
             return Response(status=status.HTTP_404_NOT_FOUND)
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class WizardImageUploadView(APIView):
+    """POST /api/wizard/upload-image/ — resize/re-encode an image for the AI
+    wizard to reference in a generated page (see WizardGenerateRequestSerializer's
+    `assets` field). Never stores the raw upload; always re-encoded via
+    image_processing.process_upload, which also bounds dimensions/size so a
+    heavy upload can't affect any other flow (request timeout, disk, memory).
+    """
+
+    permission_classes = [IsAuthenticated]
+    parser_classes = [MultiPartParser]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "wizard_upload"
+
+    def post(self, request):
+        upload = request.FILES.get("file")
+        if not upload:
+            return Response({"error": "invalid_input", "detail": "no file provided"}, status=400)
+
+        if request.user.uploaded_assets.count() >= MAX_UPLOADED_ASSETS_PER_USER:
+            return Response({"error": "too_many_assets"}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            encoded, _content_type, width, height = process_upload(upload.read())
+        except ImageProcessingError as exc:
+            return Response({"error": "invalid_image", "detail": str(exc)}, status=400)
+
+        asset = UploadedAsset(owner=request.user, width=width, height=height)
+        asset.file.save("upload.jpg", ContentFile(encoded), save=True)
+        return Response(
+            UploadedAssetSerializer(asset).data,
+            status=status.HTTP_201_CREATED,
+        )

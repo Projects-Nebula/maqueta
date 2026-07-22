@@ -67,3 +67,22 @@ class UserTemplateRevision(models.Model):
 
     def __str__(self):
         return f"{self.user_template_id} v{self.version}"
+
+
+class UploadedAsset(models.Model):
+    """An image a user uploaded for the wizard, already resized/re-encoded
+    server-side (see apps.editor.image_processing) — never the raw upload."""
+
+    owner = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="uploaded_assets"
+    )
+    file = models.ImageField(upload_to="wizard-uploads/%Y/%m/")
+    width = models.PositiveIntegerField()
+    height = models.PositiveIntegerField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return self.file.name

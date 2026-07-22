@@ -5,7 +5,7 @@ import json
 from django.conf import settings
 from rest_framework import serializers
 
-from .sanitize import SanitizationError, sanitize_node
+from .sanitize import ASSET_URL_PREFIX, MAX_ASSETS, SanitizationError, sanitize_node
 
 
 class NonNegativeIntListField(serializers.ListField):
@@ -105,5 +105,24 @@ class WizardReviewRequestSerializer(serializers.Serializer):
         return attrs
 
 
+class AssetInputSerializer(serializers.Serializer):
+    """An image the user already uploaded (see WizardImageUploadView) that
+    the AI may reference in the generated page's state.assets."""
+
+    id = serializers.CharField(max_length=50)
+    url = serializers.CharField(max_length=500)
+    width = serializers.IntegerField(min_value=1)
+    height = serializers.IntegerField(min_value=1)
+
+    def validate_url(self, value):
+        if not value.startswith(ASSET_URL_PREFIX):
+            raise serializers.ValidationError("must be an uploaded asset URL")
+        return value
+
+
 class WizardGenerateRequestSerializer(WizardReviewRequestSerializer):
     """Same accumulated context as the review step, once it says ready."""
+
+    assets = serializers.ListField(
+        child=AssetInputSerializer(), required=False, default=list, max_length=MAX_ASSETS
+    )

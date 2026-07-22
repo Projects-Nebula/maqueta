@@ -18,6 +18,13 @@ FORBIDDEN_ATTRS = {"srcdoc", "nonce", "integrity"}
 URL_ATTRS = {"href", "src", "action", "formaction", "poster", "cite", "background"}
 SAFE_URL_SCHEMES = {"http", "https", "mailto", "tel"}
 
+# state.assets may only reference the app's own uploaded-image storage (never
+# an arbitrary external URL) — keep in sync with settings.MEDIA_URL. Not
+# imported from Django settings to keep this module dependency-free.
+ASSET_URL_PREFIX = "/media/"
+MAX_ASSETS = 20
+MAX_ASSET_DIMENSION = 4000
+
 # CSS property allowlist. Anything outside this set is rejected.
 CSS_PROPERTY_ALLOWLIST = {
     "color",
@@ -189,6 +196,23 @@ def check_css_media_query(query: str) -> None:
         raise SanitizationError("media query required")
     if not CSS_MEDIA_QUERY_ALLOWED.match(query):
         raise SanitizationError(f"unsafe media query: {query}")
+
+
+def check_asset_entry(asset_id: str, entry: dict) -> None:
+    if not isinstance(asset_id, str) or not asset_id.strip():
+        raise SanitizationError("asset id required")
+    if not isinstance(entry, dict) or set(entry.keys()) != {"url", "width", "height"}:
+        raise SanitizationError(f"unexpected keys in asset entry: {asset_id}")
+    url = entry.get("url")
+    if not isinstance(url, str) or not url.startswith(ASSET_URL_PREFIX):
+        raise SanitizationError(f"asset url must be an uploaded asset: {asset_id}")
+    check_url_value(url)
+    for dim in ("width", "height"):
+        value = entry.get(dim)
+        valid = isinstance(value, int) and not isinstance(value, bool)
+        valid = valid and 0 < value <= MAX_ASSET_DIMENSION
+        if not valid:
+            raise SanitizationError(f"invalid asset {dim}: {asset_id}")
 
 
 def check_attributes(attributes: dict) -> None:

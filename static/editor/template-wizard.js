@@ -16,8 +16,12 @@
     send: document.getElementById("wizardSend"),
     form: document.getElementById("wizardQuestionForm"),
     fields: document.getElementById("wizardFields"),
+    imageInput: document.getElementById("wizardImageInput"),
+    imageList: document.getElementById("wizardImageList"),
   };
   if (!els.messages) return;
+
+  const MAX_ASSETS = 20;
 
   const MAX_REVIEW_ROUNDS = 5;
 
@@ -239,7 +243,58 @@
     history: [],
     reviewRounds: 0,
     phase: "intro",
+    assets: [],
   };
+
+  function renderImageList() {
+    if (!els.imageList) return;
+    els.imageList.innerHTML = "";
+    state.assets.forEach((asset) => {
+      const img = document.createElement("img");
+      img.src = asset.url;
+      img.alt = "";
+      els.imageList.appendChild(img);
+    });
+  }
+
+  async function uploadImage(file) {
+    if (state.assets.length >= MAX_ASSETS) {
+      appendErrorBubble("Ya subiste el máximo de imágenes para este template.");
+      return;
+    }
+    const formData = new FormData();
+    formData.append("file", file);
+    try {
+      const response = await fetch("/api/user-templates/wizard-images/", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "X-CSRFToken": getCsrfToken() },
+        body: formData,
+      });
+      if (!response.ok) {
+        appendErrorBubble("No se pudo subir la imagen.");
+        return;
+      }
+      const data = await response.json();
+      state.assets.push({
+        id: "asset-" + data.id,
+        url: data.url,
+        width: data.width,
+        height: data.height,
+      });
+      renderImageList();
+    } catch (e) {
+      appendErrorBubble("No se pudo subir la imagen.");
+    }
+  }
+
+  if (els.imageInput) {
+    els.imageInput.addEventListener("change", () => {
+      const file = els.imageInput.files && els.imageInput.files[0];
+      if (file) uploadImage(file);
+      els.imageInput.value = "";
+    });
+  }
 
   function setComposerVisible(visible) {
     els.composer.classList.toggle("hidden", !visible);
@@ -333,6 +388,7 @@
       description: state.description,
       answers: state.answers,
       history: state.history,
+      assets: state.assets,
     });
     if (error) {
       appendErrorBubble(errorMessage(error));

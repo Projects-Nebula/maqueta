@@ -54,3 +54,32 @@ def test_generate_document_forces_components_and_assets_even_if_model_omits_them
     assert state["components"] == {}
     assert state["assets"] == {}
     assert state["styles"] == VALID_STYLES
+
+
+def test_generate_document_registers_provided_assets_server_side():
+    # The model's own JSON never controls assets — even if it tried to
+    # hallucinate an entry, the service overwrites it with exactly what the
+    # (already-uploaded, already-validated) client-provided list says.
+    skeleton_with_hallucinated_assets = {
+        **VALID_SKELETON,
+        "assets": {"hallucinated": {"url": "https://evil.example/x.png"}},
+    }
+    provider = _StubProvider(
+        [
+            {
+                "name": "Mi Negocio",
+                "summary": "resumen",
+                "document": skeleton_with_hallucinated_assets,
+            },
+            {"styles": VALID_STYLES},
+        ]
+    )
+    service = WizardAIService(provider=provider, chat_provider=provider)
+
+    assets = [{"id": "a1", "url": "/media/wizard-uploads/x.jpg", "width": 800, "height": 600}]
+    events = list(service.stream_generate_document("desc", {"brand": "x"}, [], assets=assets))
+
+    state = [v for k, v in events if k == "done"][0].state
+    assert state["assets"] == {
+        "asset-0": {"url": "/media/wizard-uploads/x.jpg", "width": 800, "height": 600}
+    }

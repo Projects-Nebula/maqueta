@@ -110,6 +110,12 @@ STORAGES = {
     "staticfiles": {"BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage"},
 }
 
+# User-uploaded wizard images (apps/editor/models.py's UploadedAsset). Served
+# by config/urls.py's own route (ponytail: plain Django file serving, fine at
+# this app's scale — swap for object storage/CDN if upload volume ever grows).
+MEDIA_URL = "/media/"
+MEDIA_ROOT = BASE_DIR / "media"
+
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 LOGIN_URL = "accounts:login"
@@ -128,6 +134,7 @@ REST_FRAMEWORK = {
         "ai_wizard_questions": "10/m",
         "ai_wizard_review": "15/m",
         "ai_wizard_generate": "6/m",
+        "wizard_upload": "20/m",
     },
 }
 

@@ -63,11 +63,20 @@ natural next steps. Checked = done.
   browser at request time. Falls back to the first-letter avatar when `state`
   is null/empty (e.g. `Template.state = None` uses the built-in default page).
   Verified with a real Playwright screenshot against a seeded template.
-- [ ] **Image upload for the wizard.** Deliberately deferred to a second pass:
-  let a user attach images while building a custom template, optimize them
-  server-side (resize/compress, cap dimensions) so a heavy upload can't
-  affect any other flow, and register them in `state.assets` for use in the
-  generated page.
+- [x] **Image upload for the wizard.** `POST /api/user-templates/wizard-images/`
+  (`WizardImageUploadView`) — Pillow re-encodes every upload from scratch
+  (`apps/editor/image_processing.py`: format/size validated, downscaled to
+  1600px long edge, always re-saved as JPEG, stripping EXIF), owner-scoped
+  `UploadedAsset` model, per-user upload cap. Registered in `state.assets`,
+  but never AI-authored: `wizard_service.py` builds `assets` server-side from
+  exactly what the client already uploaded, and the model only picks a URL
+  from that list to put in `<img src>` — closes what would otherwise have
+  been the same "AI can smuggle anything into an unvalidated JSON blob" gap
+  the `@media` fix closed above. `document_validation.py` validates the
+  shape regardless (`check_asset_entry`, url must be under `/media/`).
+  Minimal wizard UI (file input + thumbnail strip) wired into the existing
+  question-form step. Verified end-to-end with a real Playwright run: upload
+  → resize/re-encode → served via `/media/` → thumbnail shown.
 
 ## Low priority / nice to have
 

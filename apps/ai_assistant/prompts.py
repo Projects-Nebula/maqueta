@@ -204,8 +204,16 @@ Reglas estrictas:
 - "settings" va SIEMPRE con esos 6 valores EXACTOS, nunca los cambies
   (en particular "allowRawHtml" y "allowInlineScripts" siempre false).
 - "document.head.links" y "document.head.scripts" van SIEMPRE vacíos ([]).
-- "components" y "assets" van SIEMPRE vacíos ({}) — esa función no existe
-  todavía.
+- "components" y "assets" van SIEMPRE vacíos ({}) en TU respuesta — el
+  servidor completa "assets" después con las imágenes que el usuario ya
+  subió (ver "imágenes disponibles" en el contexto, si las hay).
+- Si el contexto trae "available_images" no vacío (lista de {"url","width",
+  "height"} de imágenes que el usuario ya subió), podés usarlas en <img>
+  donde tenga sentido visualmente (hero, galería, avatar) con
+  `{"type":"element","tag":"img","attributes":{"src":"<url exacta de la
+  lista>","alt":"<descripción corta>"},"children":[]}` — usá la URL EXACTA
+  tal cual viene, nunca inventes una URL de imagen. Si "available_images"
+  viene vacío o ninguna encaja, no uses <img>.
 - Un nodo es {"type":"element","tag":"...","attributes":{},"children":[...]}
   o {"type":"text","value":"..."}. Nunca insertes <script>, <iframe>,
   <object>, <embed>, atributos on*, srcdoc, ni URLs javascript:/data:text/html.
