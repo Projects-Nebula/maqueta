@@ -1,0 +1,282 @@
+{% load static %}<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Visual JSON Page Builder</title>
+  <link rel="stylesheet" href="{% static 'editor/editor.css' %}">
+</head>
+<body data-user-template-id="{{ user_template_id|default:'' }}">
+  <div class="app">
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark">{ }</div>
+        <div class="brand-copy">
+          <strong>Visual JSON Page Builder</strong>
+          <span>Edita una página sin tocar código</span>
+        </div>
+      </div>
+
+      <div class="topbar-spacer"></div>
+
+      <div class="action-group">
+        <button class="btn" id="undoButton" type="button" title="Deshacer (Ctrl/Cmd + Z)" disabled>↶ Deshacer</button>
+        <button class="btn" id="redoButton" type="button" title="Rehacer (Ctrl/Cmd + Shift + Z)" disabled>↷ Rehacer</button>
+        <button class="btn" id="importButton" type="button">↥ Importar JSON</button>
+        <button class="btn" id="copyButton" type="button">⧉ Copiar JSON</button>
+        <button class="btn success" id="saveTemplateButton" type="button">☆ Guardar</button>
+        <button class="btn primary" id="downloadButton" type="button">↓ Descargar JSON</button>
+        <input class="hidden" id="fileInput" type="file" accept=".json,application/json">
+      </div>
+    </header>
+
+    <main class="workspace">
+      <div id="editorModalBackdrop" class="editor-modal-backdrop hidden"></div>
+      <section class="editor-shell panel-modal hidden" id="elementModal" role="dialog" aria-modal="true" aria-label="Editor del elemento">
+        <button id="editorModalClose" class="editor-modal-close" type="button" aria-label="Cerrar editor">×</button>
+
+        <div class="inspector-shell">
+          <div id="inspector">
+            <div class="inspector-empty">Selecciona un elemento en la vista previa para editarlo.</div>
+          </div>
+        </div>
+
+        <!--
+          The "Estructura avanzada" panel was removed from the UI. These controls
+          stay in the DOM (hidden) because editor-core.js binds listeners to them
+          by id WITHOUT null-guards, and the floating action bar forwards its
+          Duplicar/Eliminar clicks to #duplicateButton / #deleteButton. Removing
+          them would crash the editor's init. Do not delete.
+        -->
+        <div class="hidden" aria-hidden="true">
+          <button id="addChildButton" type="button"></button>
+          <button id="duplicateButton" type="button"></button>
+          <button id="moveUpButton" type="button"></button>
+          <button id="moveDownButton" type="button"></button>
+          <button id="deleteButton" type="button"></button>
+          <div id="tree"></div>
+        </div>
+      </section>
+
+      <section class="section-modal panel-modal hidden" id="sectionModal" role="dialog" aria-modal="true" aria-label="Secciones de la página">
+        <button id="sectionModalClose" class="editor-modal-close" type="button" aria-label="Cerrar">×</button>
+        <nav class="tabs hidden" aria-label="Secciones del editor">
+          <button class="tab active" data-tab="content" type="button">Contenido</button>
+          <button class="tab" data-tab="design" type="button">Diseño</button>
+          <button class="tab" data-tab="seo" type="button">SEO</button>
+          <button class="tab" data-tab="json" type="button">JSON avanzado</button>
+        </nav>
+
+        <section class="tab-panel active" data-panel="content">
+          <h2 class="panel-title">Contenido rápido</h2>
+          <p class="panel-help">Agrega secciones prediseñadas y luego personalízalas desde la pestaña Estructura.</p>
+
+          <div class="section-card">
+            <h3>Agregar una sección</h3>
+            <div class="preset-grid">
+              <button class="preset" data-preset="hero" type="button"><span class="preset-icon">▣</span>Hero</button>
+              <button class="preset" data-preset="features" type="button"><span class="preset-icon">✦</span>Beneficios</button>
+              <button class="preset" data-preset="text" type="button"><span class="preset-icon">¶</span>Texto</button>
+              <button class="preset" data-preset="image" type="button"><span class="preset-icon">▧</span>Imagen</button>
+              <button class="preset" data-preset="cta" type="button"><span class="preset-icon">→</span>Llamado</button>
+              <button class="preset" data-preset="footer" type="button"><span class="preset-icon">▬</span>Footer</button>
+            </div>
+          </div>
+
+          <div class="section-card">
+            <h3>Datos principales</h3>
+            <div class="form-grid">
+              <label class="field">
+                <span>Título de la página</span>
+                <input class="control" id="quickTitle" type="text">
+              </label>
+              <label class="field">
+                <span>Texto principal del Hero</span>
+                <input class="control" id="quickHeroTitle" type="text">
+                <small>Se actualiza el primer H1 encontrado.</small>
+              </label>
+              <label class="field">
+                <span>Descripción principal</span>
+                <textarea class="control" id="quickHeroDescription"></textarea>
+                <small>Se actualiza el primer párrafo del Hero.</small>
+              </label>
+            </div>
+          </div>
+
+          <div class="section-card">
+            <h3>Proyecto</h3>
+            <div class="inline-actions">
+              <button class="btn small" id="resetButton" type="button">Restablecer ejemplo</button>
+              <button class="btn small" id="downloadHtmlButton" type="button">Descargar HTML generado</button>
+            </div>
+          </div>
+        </section>
+
+        <section class="tab-panel" data-panel="design">
+          <h2 class="panel-title">Diseño global</h2>
+          <p class="panel-help">Cambia los colores, tipografía y dimensiones principales. La vista previa se actualiza inmediatamente.</p>
+
+          <div class="section-card">
+            <h3>Colores</h3>
+            <div class="form-grid two">
+              <label class="field"><span>Principal</span><div class="color-control"><input id="primaryColorPicker" type="color"><input class="control" id="primaryColor" type="text"></div></label>
+              <label class="field"><span>Fondo</span><div class="color-control"><input id="backgroundColorPicker" type="color"><input class="control" id="backgroundColor" type="text"></div></label>
+              <label class="field"><span>Texto</span><div class="color-control"><input id="textColorPicker" type="color"><input class="control" id="textColor" type="text"></div></label>
+              <label class="field"><span>Superficie</span><div class="color-control"><input id="surfaceColorPicker" type="color"><input class="control" id="surfaceColor" type="text"></div></label>
+            </div>
+          </div>
+
+          <div class="section-card">
+            <h3>Tipografía y forma</h3>
+            <div class="form-grid two">
+              <label class="field">
+                <span>Fuente</span>
+                <select class="control" id="fontFamily">
+                  <option value="Inter, Arial, sans-serif">Inter</option>
+                  <option value="Arial, sans-serif">Arial</option>
+                  <option value="Georgia, serif">Georgia</option>
+                  <option value="'Trebuchet MS', sans-serif">Trebuchet MS</option>
+                  <option value="ui-monospace, monospace">Monoespaciada</option>
+                </select>
+              </label>
+              <label class="field"><span>Ancho máximo</span><input class="control" id="maxWidth" type="text" placeholder="1120px"></label>
+              <label class="field"><span>Radio de bordes</span><input class="control" id="borderRadius" type="text" placeholder="18px"></label>
+              <label class="field"><span>Espacio de sección</span><input class="control" id="sectionSpacing" type="text" placeholder="80px"></label>
+            </div>
+          </div>
+        </section>
+
+        <section class="tab-panel" data-panel="seo">
+          <h2 class="panel-title">SEO y documento</h2>
+          <p class="panel-help">Configura la información que usan los buscadores, navegadores y lectores de pantalla.</p>
+
+          <div class="section-card">
+            <h3>Documento</h3>
+            <div class="form-grid two">
+              <label class="field">
+                <span>Idioma</span>
+                <select class="control" id="documentLanguage">
+                  <option value="es">Español</option>
+                  <option value="en">English</option>
+                  <option value="pt">Português</option>
+                  <option value="fr">Français</option>
+                </select>
+              </label>
+              <label class="field">
+                <span>Dirección</span>
+                <select class="control" id="documentDirection">
+                  <option value="ltr">Izquierda a derecha</option>
+                  <option value="rtl">Derecha a izquierda</option>
+                </select>
+              </label>
+            </div>
+          </div>
+
+          <div class="section-card">
+            <h3>Metadatos</h3>
+            <div class="form-grid">
+              <label class="field"><span>Título SEO</span><input class="control" id="seoTitle" type="text"></label>
+              <label class="field"><span>Descripción SEO</span><textarea class="control" id="seoDescription"></textarea></label>
+              <label class="field"><span>URL canónica</span><input class="control" id="canonicalUrl" type="url" placeholder="https://ejemplo.com/pagina"></label>
+            </div>
+          </div>
+        </section>
+
+        <section class="tab-panel" data-panel="json">
+          <h2 class="panel-title">JSON avanzado</h2>
+          <p class="panel-help">Este modo es opcional. Puedes editar directamente el documento y aplicar los cambios cuando sea válido.</p>
+          <textarea class="json-editor" id="jsonEditor" spellcheck="false"></textarea>
+          <div class="json-error" id="jsonError"></div>
+          <div class="inline-actions">
+            <button class="btn primary" id="applyJsonButton" type="button">Aplicar JSON</button>
+            <button class="btn" id="formatJsonButton" type="button">Formatear</button>
+          </div>
+        </section>
+      </section>
+
+      <section class="panel-modal ai-save-modal hidden" id="saveTemplateModal" role="dialog" aria-modal="true" aria-label="Guardar template">
+        <button id="saveTemplateModalClose" class="editor-modal-close" type="button" aria-label="Cerrar">×</button>
+        <h2 class="panel-title">Guardar template</h2>
+        <div class="inline-actions">
+          <button id="saveTemplateUpdateBtn" class="btn primary hidden" type="button">Actualizar este template</button>
+          <button id="saveTemplateHistoryToggle" class="btn small hidden" type="button">Historial ▾</button>
+        </div>
+        <div id="saveTemplateHistoryList" class="ai-history-list hidden"></div>
+        <label class="field">
+          <span>Nombre del nuevo template</span>
+          <input class="control" id="saveTemplateNameInput" type="text" placeholder="Mi template">
+        </label>
+        <button id="saveTemplateCreateBtn" class="btn" type="button">Crear nuevo</button>
+      </section>
+
+      <section class="preview-shell">
+        <div class="preview-toolbar">
+          <span class="preview-title">Vista previa</span>
+          <div class="section-openers">
+            <button class="btn small section-open" type="button" data-section="content">Contenido</button>
+            <button class="btn small section-open" type="button" data-section="design">Diseño</button>
+            <button class="btn small section-open" type="button" data-section="seo">SEO</button>
+            <button class="btn small section-open" type="button" data-section="json">JSON avanzado</button>
+          </div>
+          <span class="preview-status"><span class="status-dot"></span>En vivo</span>
+
+          <div class="device-switcher" aria-label="Tamaño de vista previa">
+            <button class="device-button active" data-device="desktop" title="Escritorio" type="button">▰</button>
+            <button class="device-button" data-device="tablet" title="Tablet" type="button">▯</button>
+            <button class="device-button" data-device="mobile" title="Móvil" type="button">▯</button>
+          </div>
+        </div>
+
+        <div class="preview-stage">
+          <div class="preview-frame-wrap" id="previewWrap">
+            <iframe id="previewFrame" title="Vista previa de la página" sandbox="allow-same-origin"></iframe>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <button class="ai-fab" id="aiFab" type="button" aria-label="Asistente IA">✦ IA</button>
+
+    <div class="ai-drawer hidden" id="aiDrawer" role="dialog" aria-label="Asistente IA">
+      <div class="ai-drawer-header">
+        <h2 class="panel-title">Asistente IA</h2>
+        <button class="ai-drawer-close" id="aiDrawerClose" type="button" aria-label="Cerrar">×</button>
+      </div>
+
+      <div class="ai-context-bar">
+        <span id="aiContextChip" class="ai-context-chip">Ningún elemento seleccionado.</span>
+        <label class="ai-global-toggle hidden">
+          <input type="checkbox" id="aiGlobalMode">
+          <span>Modo global</span>
+        </label>
+      </div>
+
+      <div class="ai-messages" id="aiMessages" role="log" aria-live="polite" aria-label="Conversación con el asistente"></div>
+
+      <span class="ai-composer-ref hidden" id="aiComposerRef"></span>
+      <div class="ai-composer">
+        <textarea class="ai-composer-input" id="aiComposerInput" placeholder="Describe el cambio…" aria-label="Describe el cambio" rows="1"></textarea>
+        <button class="ai-composer-send" id="aiComposerSend" type="button" aria-label="Enviar mensaje">➤</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script id="editor-config" type="application/json">
+    {
+      "endpoints": {
+        "transform": "{% url 'ai-editor-transform' %}"
+      }
+    }
+  </script>
+
+  {{ template_state|json_script:"template-seed" }}
+
+  <script src="{% static 'editor/editor-core.js' %}"></script>
+  <script src="{% static 'editor/editor-ai.js' %}"></script>
+  <script src="{% static 'editor/save-template.js' %}"></script>
+
+  <script src="{% static 'editor/seed-loader.js' %}"></script>
+</body>
+</html>

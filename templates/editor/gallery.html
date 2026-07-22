@@ -1,0 +1,136 @@
+{% load static %}<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mis templates</title>
+  <style>
+    :root {
+      --bg: #f5f6fa;
+      --surface: #ffffff;
+      --border: #e2e4ec;
+      --text: #182034;
+      --text-muted: #6b7080;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: Inter, Arial, sans-serif;
+      line-height: 1.5;
+    }
+
+    .gallery-header {
+      text-align: center;
+      padding: 56px 24px 32px;
+    }
+
+    .gallery-header h1 {
+      margin: 0 0 8px;
+      font-size: 32px;
+    }
+
+    .gallery-header p {
+      margin: 0;
+      color: var(--text-muted);
+      font-size: 15px;
+    }
+
+    .gallery-header a {
+      display: inline-block;
+      margin-top: 12px;
+      color: var(--text);
+      font-size: 14px;
+    }
+
+    #templateGrid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+      gap: 18px;
+      max-width: 960px;
+      margin: 0 auto;
+      padding: 0 24px 64px;
+    }
+
+    .template-card {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      width: 100%;
+      text-align: left;
+      text-decoration: none;
+      cursor: pointer;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 18px;
+      background: var(--surface);
+      font: inherit;
+      color: inherit;
+      transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+    }
+
+    .template-card:hover,
+    .template-card:focus-visible {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 24px rgba(20, 24, 40, 0.08);
+      border-color: var(--accent, var(--border));
+      outline: none;
+    }
+
+    .template-thumb {
+      width: 72px;
+      height: 72px;
+      border-radius: 10px;
+      display: grid;
+      place-items: center;
+      font-size: 30px;
+      font-weight: 800;
+      color: #fff;
+      background: var(--accent, #5b5ce2);
+      margin-bottom: 14px;
+    }
+
+    .template-name {
+      margin: 0 0 6px;
+      font-size: 16px;
+    }
+
+    .template-desc {
+      margin: 0;
+      color: var(--text-muted);
+      font-size: 13px;
+    }
+
+    .empty-state {
+      grid-column: 1 / -1;
+      text-align: center;
+      color: var(--text-muted);
+      padding: 32px 24px;
+    }
+  </style>
+</head>
+<body data-editor-url="{% url 'editor:editor' %}">
+  <header class="gallery-header">
+    <h1>Mis templates</h1>
+    <p>Tus páginas guardadas como template.</p>
+    <a href="{% url 'editor:home' %}">Ver templates base</a>
+  </header>
+
+  <main id="templateGrid">
+    {% for t in templates %}
+      <a class="template-card" href="{% url 'editor:editor' %}?ut={{ t.id }}" style="--accent: {{ t.accent|default:'#5b5ce2' }}">
+        <div class="template-thumb">{{ t.name|first }}</div>
+        <h3 class="template-name">{{ t.name }}</h3>
+        <p class="template-desc">{{ t.description }}</p>
+      </a>
+    {% empty %}
+      <p class="empty-state">Todavía no guardaste ningún template. Guardá uno desde el editor.</p>
+    {% endfor %}
+  </main>
+</body>
+</html>

@@ -1,0 +1,39 @@
+{% load static %}<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Crear template con IA</title>
+  <link rel="stylesheet" href="{% static 'editor/editor.css' %}">
+  <link rel="stylesheet" href="{% static 'editor/wizard.css' %}">
+</head>
+<body>
+  <div class="wizard-shell">
+    <header class="wizard-topbar">
+      <a class="wizard-back" href="{% url 'editor:home' %}">← Volver</a>
+      <h1>Crear mi propio template</h1>
+    </header>
+
+    <main class="wizard-panel">
+      <div class="ai-messages wizard-messages" id="wizardMessages"></div>
+
+      <form class="wizard-question-form hidden" id="wizardQuestionForm">
+        <div class="wizard-fields" id="wizardFields"></div>
+        <button type="submit" class="btn primary">Continuar</button>
+      </form>
+
+      <div class="ai-composer wizard-composer" id="wizardComposer">
+        <textarea
+          class="ai-composer-input"
+          id="wizardInput"
+          rows="1"
+          placeholder="Describí la página que querés crear…"
+        ></textarea>
+        <button class="ai-composer-send" id="wizardSend" type="button" title="Enviar">➤</button>
+      </div>
+    </main>
+  </div>
+
+  <script src="{% static 'editor/template-wizard.js' %}"></script>
+</body>
+</html>

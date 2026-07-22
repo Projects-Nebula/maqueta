@@ -1,0 +1,126 @@
+@charset "UTF-8";
+
+/* Standalone page layout for the template-creation wizard. Chat bubbles,
+   typing indicator, and composer reuse editor.css's .ai-* classes (and its
+   :root design tokens) for a consistent look with the in-editor assistant —
+   this file only adds the page shell and the dynamic question form. */
+
+body {
+  height: 100%;
+  margin: 0;
+  background: var(--app-bg);
+}
+
+.wizard-shell {
+  max-width: 720px;
+  height: 100vh;
+  margin: 0 auto;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+}
+
+.wizard-topbar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding-bottom: 16px;
+}
+
+.wizard-topbar h1 {
+  margin: 0;
+  font-size: 20px;
+}
+
+.wizard-back {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.wizard-back:hover {
+  color: var(--text);
+}
+
+.wizard-panel {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--panel-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 16px;
+}
+
+.wizard-messages {
+  padding: 4px 4px 8px;
+}
+
+.wizard-question-form {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px;
+  margin-top: 4px;
+  background: var(--panel-soft);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+.wizard-question-form.hidden {
+  display: none;
+}
+
+.wizard-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.wizard-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.wizard-field label {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.wizard-field input,
+.wizard-field textarea,
+.wizard-field select {
+  padding: 9px 11px;
+  color: var(--text);
+  background: white;
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  font: inherit;
+  font-size: 13px;
+  outline: none;
+  transition: border .15s, box-shadow .15s;
+}
+
+.wizard-field textarea {
+  resize: vertical;
+  min-height: 70px;
+}
+
+.wizard-field input:focus,
+.wizard-field textarea:focus,
+.wizard-field select:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(91, 92, 226, .12);
+}
+
+.wizard-composer.hidden {
+  display: none;
+}

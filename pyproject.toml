@@ -1,0 +1,44 @@
+[project]
+name = "visual-ai-editor"
+version = "0.1.0"
+description = "Django backend + AI assistant for a visual HTML/JSON editor"
+requires-python = ">=3.12"
+dependencies = [
+    "django>=5.1,<6.0",
+    "djangorestframework>=3.15",
+    "psycopg[binary]>=3.2",
+    "django-environ>=0.11",
+    "django-cors-headers>=4.4",
+    "openai>=1.40",
+    "jsonschema>=4.23",
+    "whitenoise>=6.7",
+    "gunicorn>=23.0",
+    "anthropic>=0.117.1",
+    "json-repair>=0.61.7",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+    "pytest-django>=4.9",
+    "pytest-mock>=3.14",
+    "ruff>=0.6",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+extend-exclude = ["migrations"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "DJ"]
+ignore = ["B905"]
+
+[tool.ruff.lint.per-file-ignores]
+"*/settings/*" = ["F403", "F405"]
+"*/prompts.py" = ["E501"]  # prompt examples need literal, unwrapped JSON lines
+
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "config.settings.development"
+python_files = ["test_*.py", "tests.py"]
+addopts = "-q"

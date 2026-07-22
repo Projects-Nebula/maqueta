@@ -1,0 +1,177 @@
+import copy
+
+import pytest
+
+from apps.ai_assistant.document_validation import DocumentValidationError, sanitize_document
+
+VALID_DOCUMENT = {
+    "schemaVersion": "2.0",
+    "settings": {
+        "strict": True,
+        "escapeText": True,
+        "allowRawHtml": False,
+        "allowInlineScripts": False,
+        "requireImageAlt": True,
+        "requireUniqueIds": True,
+    },
+    "document": {
+        "doctype": "html",
+        "htmlAttributes": {"lang": "es", "dir": "ltr"},
+        "head": {
+            "title": "Mi negocio",
+            "metas": [{"charset": "UTF-8"}],
+            "links": [],
+            "scripts": [],
+        },
+        "body": {
+            "attributes": {"class": ["page"]},
+            "children": [
+                {
+                    "type": "element",
+                    "tag": "h1",
+                    "attributes": {},
+                    "children": [{"type": "text", "value": "Bienvenido"}],
+                }
+            ],
+        },
+    },
+    "styles": {
+        "variables": {"--color-primary": "#5b5ce2"},
+        "rules": [{"selector": "h1", "declarations": {"color": "var(--color-primary)"}}],
+        "keyframes": [],
+    },
+    "components": {},
+    "assets": {},
+}
+
+
+def _doc(**overrides):
+    doc = copy.deepcopy(VALID_DOCUMENT)
+    doc.update(overrides)
+    return doc
+
+
+def test_valid_document_passes():
+    sanitize_document(VALID_DOCUMENT)
+
+
+def test_scripts_must_be_empty():
+    doc = copy.deepcopy(VALID_DOCUMENT)
+    doc["document"]["head"]["scripts"] = [{"src": "evil.js"}]
+    with pytest.raises(DocumentValidationError):
+        sanitize_document(doc)
+
+
+def test_links_must_be_empty():
+    doc = copy.deepcopy(VALID_DOCUMENT)
+    doc["document"]["head"]["links"] = [{"rel": "stylesheet", "href": "https://evil.example/x.css"}]
+    with pytest.raises(DocumentValidationError):
+        sanitize_document(doc)
+
+
+def test_allow_raw_html_rejected():
+    doc = copy.deepcopy(VALID_DOCUMENT)
+    doc["settings"]["allowRawHtml"] = True
+    with pytest.raises(DocumentValidationError):
+        sanitize_document(doc)
+
+
+def test_allow_inline_scripts_rejected():
+    doc = copy.deepcopy(VALID_DOCUMENT)
+    doc["settings"]["allowInlineScripts"] = True
+    with pytest.raises(DocumentValidationError):
+        sanitize_document(doc)
+
+
+def test_forbidden_tag_in_body_rejected():
+    doc = copy.deepcopy(VALID_DOCUMENT)
+    doc["document"]["body"]["children"].append(
+        {"type": "element", "tag": "script", "attributes": {}, "children": []}
+    )
+    with pytest.raises(DocumentValidationError):
+        sanitize_document(doc)
+
+
+def test_disallowed_css_property_in_rules_rejected():
+    doc = copy.deepcopy(VALID_DOCUMENT)
+    bad_rule = {"selector": "body", "declarations": {"behavior": "url(evil.htc)"}}
+    doc["styles"]["rules"].append(bad_rule)
+    with pytest.raises(DocumentValidationError):
+        sanitize_document(doc)
+
+
+def test_unsafe_css_selector_rejected():
+    doc = copy.deepcopy(VALID_DOCUMENT)
+    bad_rule = {"selector": "h1{}</style><script>", "declarations": {"color": "red"}}
+    doc["styles"]["rules"].append(bad_rule)
+    with pytest.raises(DocumentValidationError):
+        sanitize_document(doc)
+
+
+def test_keyframes_must_be_empty():
+    doc = copy.deepcopy(VALID_DOCUMENT)
+    doc["styles"]["keyframes"] = [{"name": "spin", "steps": []}]
+    with pytest.raises(DocumentValidationError):
+        sanitize_document(doc)
+
+
+def test_components_and_assets_must_be_empty():
+    doc = copy.deepcopy(VALID_DOCUMENT)
+    doc["components"] = {"card": {}}
+    with pytest.raises(DocumentValidationError):
+        sanitize_document(doc)
+
+    doc2 = copy.deepcopy(VALID_DOCUMENT)
+    doc2["assets"] = {"logo": "https://example.com/logo.png"}
+    with pytest.raises(DocumentValidationError):
+        sanitize_document(doc2)
+
+
+def test_unexpected_top_level_key_rejected():
+    doc = copy.deepcopy(VALID_DOCUMENT)
+    doc["extra"] = "nope"
+    with pytest.raises(DocumentValidationError):
+        sanitize_document(doc)
+
+
+def test_invalid_lang_rejected():
+    doc = copy.deepcopy(VALID_DOCUMENT)
+    doc["document"]["htmlAttributes"]["lang"] = "<script>"
+    with pytest.raises(DocumentValidationError):
+        sanitize_document(doc)
+
+
+def test_too_many_style_variables_rejected():
+    doc = copy.deepcopy(VALID_DOCUMENT)
+    doc["styles"]["variables"] = {f"--v{i}": "#fff" for i in range(101)}
+    with pytest.raises(DocumentValidationError):
+        sanitize_document(doc)
+
+
+def test_dangling_keys_on_document_rejected():
+    # Reproduces a real json-repair failure mode: a truncated/malformed
+    # response gets its syntax "fixed" by closing body.children early, and
+    # what should have been the next section ends up as stray
+    # type/tag/attributes/children keys directly on document.document
+    # instead — silently dropping content rather than raising a parse error.
+    doc = copy.deepcopy(VALID_DOCUMENT)
+    doc["document"]["type"] = "element"
+    doc["document"]["tag"] = "section"
+    doc["document"]["attributes"] = {"class": ["hero"]}
+    doc["document"]["children"] = []
+    with pytest.raises(DocumentValidationError):
+        sanitize_document(doc)
+
+
+def test_dangling_keys_on_body_rejected():
+    doc = copy.deepcopy(VALID_DOCUMENT)
+    doc["document"]["body"]["type"] = "element"
+    with pytest.raises(DocumentValidationError):
+        sanitize_document(doc)
+
+
+def test_dangling_keys_on_style_rule_rejected():
+    doc = copy.deepcopy(VALID_DOCUMENT)
+    doc["styles"]["rules"][0]["extra"] = "nope"
+    with pytest.raises(DocumentValidationError):
+        sanitize_document(doc)
