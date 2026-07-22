@@ -133,6 +133,22 @@ def test_invalid_operations_rejected(api, mocker):
     assert dict(events)["error"] == {"error": "invalid_operations"}
 
 
+def test_rate_limit_is_isolated_per_user(api, other_api):
+    # ai_transform is rate-limited at 20/m (config/settings/base.py); exhaust
+    # one user's bucket and confirm a different user is unaffected — the
+    # throttle key already includes the user id (DRF's ScopedRateThrottle),
+    # so this is per-user, not a single shared bucket for the whole scope.
+    for _ in range(20):
+        response = api.post(URL, _payload(), format="json")
+        assert response.status_code == 200
+
+    throttled = api.post(URL, _payload(), format="json")
+    assert throttled.status_code == 429
+
+    other_response = other_api.post(URL, _payload(), format="json")
+    assert other_response.status_code == 200
+
+
 def test_unexpected_error_is_caught_and_logged(api, mocker, caplog):
     mocker.patch(
         "apps.ai_assistant.views.EditorAIService.stream_generate_operations",

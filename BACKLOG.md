@@ -68,8 +68,11 @@ natural next steps. Checked = done.
   (`.github/workflows/ci.yml`, Postgres 16 service, uv + Node setup). Note:
   repo has no `.git` yet — workflow is ready but won't run until pushed to
   GitHub.
-- [ ] **Per-object rate limiting** on the AI transform endpoint (per user, not
-  just per scope) for finer abuse control.
+- [x] **Per-object rate limiting** on the AI transform endpoint. Verified
+  already true: DRF's `ScopedRateThrottle.get_cache_key` keys on
+  `request.user.pk` when authenticated, so it was already per-user, not one
+  shared bucket for the whole scope. Added
+  `test_rate_limit_is_isolated_per_user` to lock the guarantee in.
 - [ ] **Expand the CSS property allowlist** as real templates need it (kept
   intentionally tight in `sanitize.py`). Ongoing — several safe properties
   (`-webkit-font-smoothing`, `backdrop-filter`, `align-self`,
