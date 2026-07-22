@@ -21,10 +21,6 @@ natural next steps. Checked = done.
   Messages protocols with `"Error from provider (Console Go): Upstream
   request failed"` (400) — confirmed not a protocol issue on our side.
   Follow up with opencode.ai support before retrying.
-- [ ] **Validate `OpenAIProvider` against the real API.** Tests use the fake +
-  mocks; the Responses API `text.format` json_schema shape may need adjustment
-  for the installed SDK version once a real `OPENAI_API_KEY` is set.
-
 ## Medium priority
 
 - [x] **Event-driven selection in the AI panel.** 400ms poll replaced: core
