@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Iniciar sesión</title>
+  <title>Crear cuenta</title>
   <style>
     body { font-family: system-ui, sans-serif; background: #f5f6fb; margin: 0;
            display: grid; place-items: center; min-height: 100vh; }
@@ -15,7 +15,7 @@
             box-sizing: border-box; }
     button { width: 100%; margin-top: 20px; padding: 11px; border: 0; border-radius: 8px;
              background: #5b5ce2; color: #fff; font-weight: 600; cursor: pointer; }
-    .error { color: #c0392b; font-size: 13px; margin-top: 12px; }
+    .error { color: #c0392b; font-size: 13px; margin: 4px 0 0; }
     .footer-link { text-align: center; font-size: 13px; margin-top: 16px; color: #6b7094; }
     .footer-link a { color: #5b5ce2; }
   </style>
@@ -23,15 +23,18 @@
 <body>
   <form class="card" method="post">
     {% csrf_token %}
-    <h1>Iniciar sesión</h1>
-    {% if form.errors %}<p class="error">Usuario o contraseña incorrectos.</p>{% endif %}
-    <label for="id_username">Usuario</label>
+    <h1>Crear cuenta</h1>
+    <label for="{{ form.username.id_for_label }}">Usuario</label>
     {{ form.username }}
-    <label for="id_password">Contraseña</label>
-    {{ form.password }}
-    <input type="hidden" name="next" value="{{ next }}">
-    <button type="submit">Entrar</button>
+    {% for error in form.username.errors %}<p class="error">{{ error }}</p>{% endfor %}
+    <label for="{{ form.password1.id_for_label }}">Contraseña</label>
+    {{ form.password1 }}
+    {% for error in form.password1.errors %}<p class="error">{{ error }}</p>{% endfor %}
+    <label for="{{ form.password2.id_for_label }}">Confirmar contraseña</label>
+    {{ form.password2 }}
+    {% for error in form.password2.errors %}<p class="error">{{ error }}</p>{% endfor %}
+    <button type="submit">Crear cuenta</button>
   </form>
-  <p class="footer-link"><a href="{% url 'accounts:signup' %}">Crear una cuenta</a></p>
+  <p class="footer-link"><a href="{% url 'accounts:login' %}">Ya tengo cuenta, iniciar sesión</a></p>
 </body>
 </html>

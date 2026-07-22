@@ -49,8 +49,11 @@ natural next steps. Checked = done.
   the same revision-retention cap (20) to `apps/projects/views.py` that
   `UserTemplate` already has. Verified end-to-end with a real Playwright run
   (edit → wait past debounce → revision persisted via the API).
-- [ ] **Registration flow.** accounts app is prepared for it but signup is not
-  implemented yet.
+- [x] **Registration flow.** `SignupView` (`apps/accounts/views.py`) uses
+  Django's stdlib `UserCreationForm` — no custom fields, no new dependency —
+  logs the new user in immediately and redirects to the editor, same as
+  login. `/signup/` linked from `login.html`. Verified with a real
+  Playwright signup run end to end.
 - [x] **Frontend test runner.** `npm test` runs `node --test tests/js/**/*.test.js`
   (`package.json`); wired into `.github/workflows/ci.yml`.
 - [x] **Template thumbnails.** Server-side mini-render (`apps/editor/rendering.py`)
