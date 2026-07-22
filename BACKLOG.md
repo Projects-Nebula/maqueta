@@ -61,8 +61,9 @@ natural next steps. Checked = done.
 
 ## Low priority / nice to have
 
-- [ ] **Cap / prune `UserTemplate` revisions.** History grows unbounded per
-  template; add a retention limit (keep last N) or a bulk "clear history".
+- [x] **Cap / prune `UserTemplate` revisions.** `REVISION_RETENTION_LIMIT = 20`
+  in `apps/editor/views.py`; each update prunes to the N most recent right
+  after snapshotting. Covered by `tests/test_user_templates.py`.
 - [x] **CI pipeline** running ruff, pytest, the Node test, and a Docker build
   (`.github/workflows/ci.yml`, Postgres 16 service, uv + Node setup). Note:
   repo has no `.git` yet — workflow is ready but won't run until pushed to

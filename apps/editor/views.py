@@ -11,6 +11,9 @@ from rest_framework.response import Response
 from .models import Template, UserTemplate, UserTemplateRevision
 from .serializers import UserTemplateRevisionSerializer, UserTemplateSerializer
 
+# History grows unbounded otherwise — keep the most recent N per template.
+REVISION_RETENTION_LIMIT = 20
+
 
 @never_cache
 @login_required
@@ -94,6 +97,10 @@ class UserTemplateViewSet(viewsets.ModelViewSet):
             UserTemplateRevision.objects.create(
                 user_template=instance, version=next_version, state=instance.state
             )
+            keep_ids = instance.revisions.order_by("-version").values_list("pk", flat=True)[
+                :REVISION_RETENTION_LIMIT
+            ]
+            instance.revisions.exclude(pk__in=list(keep_ids)).delete()
         serializer.save()
 
     @action(detail=True, methods=["get"])
