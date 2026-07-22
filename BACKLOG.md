@@ -84,9 +84,8 @@ natural next steps. Checked = done.
   in `apps/editor/views.py`; each update prunes to the N most recent right
   after snapshotting. Covered by `tests/test_user_templates.py`.
 - [x] **CI pipeline** running ruff, pytest, the Node test, and a Docker build
-  (`.github/workflows/ci.yml`, Postgres 16 service, uv + Node setup). Note:
-  repo has no `.git` yet — workflow is ready but won't run until pushed to
-  GitHub.
+  (`.github/workflows/ci.yml`, Postgres 16 service, uv + Node setup). Repo is
+  now a git repo (`main` branch, local); push to GitHub to activate it.
 - [x] **Per-object rate limiting** on the AI transform endpoint. Verified
   already true: DRF's `ScopedRateThrottle.get_cache_key` keys on
   `request.user.pk` when authenticated, so it was already per-user, not one
