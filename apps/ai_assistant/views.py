@@ -1,6 +1,7 @@
 """AI transform endpoint."""
 
 import logging
+import time
 
 from django.http import StreamingHttpResponse
 from rest_framework import status
@@ -14,6 +15,7 @@ from .providers import AIProviderError, AIProviderTimeout
 from .serializers import TransformRequestSerializer
 from .service import EditorAIService, EditorContext
 from .sse import first_error, sse_event
+from .usage_logging import log_ai_usage
 
 logger = logging.getLogger(__name__)
 
@@ -61,8 +63,11 @@ class EditorTransformView(APIView):
             history=data.get("history", []),
         )
         user_id = request.user.pk
+        scope = self.throttle_scope
 
         def event_stream():
+            start_time = time.monotonic()
+            outcome = "success"
             try:
                 for kind, value in EditorAIService().stream_generate_operations(context):
                     if kind == "reasoning":
@@ -77,13 +82,16 @@ class EditorTransformView(APIView):
                             },
                         )
             except AIProviderTimeout:
+                outcome = "ai_timeout"
                 logger.warning("AI transform timed out for user %s", user_id)
                 yield sse_event("error", {"error": "ai_timeout"})
             except AIProviderError:
                 # Do not leak provider internals to the client.
+                outcome = "ai_unavailable"
                 logger.exception("AI provider error for user %s", user_id)
                 yield sse_event("error", {"error": "ai_unavailable"})
             except OperationValidationError:
+                outcome = "invalid_operations"
                 logger.warning("AI produced invalid operations for user %s", user_id)
                 yield sse_event("error", {"error": "invalid_operations"})
             except Exception:
@@ -91,8 +99,11 @@ class EditorTransformView(APIView):
                 # would otherwise crash the stream generator uncaught, turning into
                 # a bare connection drop the client can't distinguish from a real
                 # provider outage. Log the real traceback so it's diagnosable.
+                outcome = "unexpected_error"
                 logger.exception("Unexpected error during AI transform for user %s", user_id)
                 yield sse_event("error", {"error": "unexpected_error"})
+            finally:
+                log_ai_usage(scope, user_id, outcome, start_time)
 
         response = StreamingHttpResponse(event_stream(), content_type="text/event-stream")
         response["Cache-Control"] = "no-cache"

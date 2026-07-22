@@ -88,7 +88,13 @@ natural next steps. Checked = done.
   working in-editor assistant under time pressure (see the `ponytail:`
   comment at the top of `template-wizard.js`). Worth extracting into a
   shared module if a third consumer of this logic shows up.
-- [ ] **Structured request logging / metrics** for AI usage and error rates.
+- [x] **Structured request logging / metrics** for AI usage and error rates.
+  `apps/ai_assistant/usage_logging.py` logs one logfmt line
+  (`ai_usage scope=... user=... outcome=... duration_ms=...`) per SSE request
+  across all 4 AI endpoints (transform + 3 wizard views), greppable/parseable
+  without a new metrics dependency. Bonus: the wizard views had the same
+  uncaught-exception gap as the transform 500 fix above — added the same
+  `except Exception` catch-all there too, each covered by a test.
 
 ## Done (Unreleased)
 

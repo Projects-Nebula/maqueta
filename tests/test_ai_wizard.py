@@ -1,3 +1,5 @@
+import logging
+
 import pytest
 
 from apps.ai_assistant.document_validation import DocumentValidationError
@@ -189,3 +191,71 @@ def test_generate_rejects_unsafe_document(api, mocker):
     )
     assert response.status_code == 200
     assert dict(parse_sse(sse_body(response)))["error"] == {"error": "invalid_document"}
+
+
+# --- unexpected errors: caught, logged, don't crash the stream ------------
+
+
+def test_questions_unexpected_error_is_caught(api, mocker, caplog):
+    def gen(*args, **kwargs):
+        raise KeyError("unexpected shape")
+        yield  # pragma: no cover
+
+    mocker.patch("apps.ai_assistant.wizard_views.WizardAIService.stream_generate_questions", gen)
+    response = api.post(QUESTIONS_URL, {"description": "x"}, format="json")
+    assert response.status_code == 200
+    assert dict(parse_sse(sse_body(response)))["error"] == {"error": "unexpected_error"}
+    assert "Unexpected error during wizard questions" in caplog.text
+
+
+def test_review_unexpected_error_is_caught(api, mocker, caplog):
+    def gen(*args, **kwargs):
+        raise KeyError("unexpected shape")
+        yield  # pragma: no cover
+
+    mocker.patch("apps.ai_assistant.wizard_views.WizardAIService.stream_review_answers", gen)
+    response = api.post(REVIEW_URL, {"description": "x", "answers": {}}, format="json")
+    assert response.status_code == 200
+    assert dict(parse_sse(sse_body(response)))["error"] == {"error": "unexpected_error"}
+    assert "Unexpected error during wizard review" in caplog.text
+
+
+def test_generate_unexpected_error_is_caught(api, mocker, caplog):
+    def gen(*args, **kwargs):
+        raise KeyError("unexpected shape")
+        yield  # pragma: no cover
+
+    mocker.patch("apps.ai_assistant.wizard_views.WizardAIService.stream_generate_document", gen)
+    response = api.post(GENERATE_URL, {"description": "x", "answers": {}}, format="json")
+    assert response.status_code == 200
+    assert dict(parse_sse(sse_body(response)))["error"] == {"error": "unexpected_error"}
+    assert "Unexpected error during wizard generate" in caplog.text
+
+
+# --- structured usage logging ----------------------------------------------
+
+
+def test_usage_log_line_emitted_on_success(api, mocker, caplog):
+    result = WizardQuestionsResult(questions=[])
+    mocker.patch(
+        "apps.ai_assistant.wizard_views.WizardAIService.stream_generate_questions",
+        _stream(("done", result)),
+    )
+    with caplog.at_level(logging.INFO, logger="ai.usage"):
+        response = api.post(QUESTIONS_URL, {"description": "x"}, format="json")
+        sse_body(response)  # the usage log line fires when the generator finishes
+    assert "ai_usage scope=ai_wizard_questions" in caplog.text
+    assert "outcome=success" in caplog.text
+
+
+def test_usage_log_line_emitted_on_error(api, mocker, caplog):
+    def gen(*args, **kwargs):
+        raise AIProviderTimeout("slow")
+        yield  # pragma: no cover
+
+    mocker.patch("apps.ai_assistant.wizard_views.WizardAIService.stream_generate_questions", gen)
+    with caplog.at_level(logging.INFO, logger="ai.usage"):
+        response = api.post(QUESTIONS_URL, {"description": "x"}, format="json")
+        sse_body(response)
+    assert "ai_usage scope=ai_wizard_questions" in caplog.text
+    assert "outcome=ai_timeout" in caplog.text

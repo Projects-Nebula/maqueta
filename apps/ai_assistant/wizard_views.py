@@ -8,6 +8,7 @@ the already-existing POST /api/user-templates/ (UserTemplateViewSet).
 """
 
 import logging
+import time
 
 from django.http import StreamingHttpResponse
 from rest_framework import status
@@ -24,6 +25,7 @@ from .serializers import (
     WizardReviewRequestSerializer,
 )
 from .sse import first_error, sse_event
+from .usage_logging import log_ai_usage
 from .wizard_service import WizardAIService, WizardValidationError
 
 logger = logging.getLogger(__name__)
@@ -51,8 +53,11 @@ class WizardQuestionsView(APIView):
             )
         data = serializer.validated_data
         user_id = request.user.pk
+        scope = self.throttle_scope
 
         def event_stream():
+            start_time = time.monotonic()
+            outcome = "success"
             try:
                 for kind, value in WizardAIService().stream_generate_questions(
                     data["description"], data.get("history", [])
@@ -65,14 +70,23 @@ class WizardQuestionsView(APIView):
                             {"questions": value.questions, "reasoning": value.reasoning},
                         )
             except AIProviderTimeout:
+                outcome = "ai_timeout"
                 logger.warning("wizard questions timed out for user %s", user_id)
                 yield sse_event("error", {"error": "ai_timeout"})
             except AIProviderError:
+                outcome = "ai_unavailable"
                 logger.exception("wizard questions provider error for user %s", user_id)
                 yield sse_event("error", {"error": "ai_unavailable"})
             except WizardValidationError:
+                outcome = "invalid_questions"
                 logger.warning("wizard produced invalid questions for user %s", user_id)
                 yield sse_event("error", {"error": "invalid_questions"})
+            except Exception:
+                outcome = "unexpected_error"
+                logger.exception("Unexpected error during wizard questions for user %s", user_id)
+                yield sse_event("error", {"error": "unexpected_error"})
+            finally:
+                log_ai_usage(scope, user_id, outcome, start_time)
 
         response = StreamingHttpResponse(event_stream(), content_type="text/event-stream")
         response["Cache-Control"] = "no-cache"
@@ -102,8 +116,11 @@ class WizardReviewView(APIView):
             )
         data = serializer.validated_data
         user_id = request.user.pk
+        scope = self.throttle_scope
 
         def event_stream():
+            start_time = time.monotonic()
+            outcome = "success"
             try:
                 for kind, value in WizardAIService().stream_review_answers(
                     data["description"], data["answers"], data.get("history", [])
@@ -120,11 +137,19 @@ class WizardReviewView(APIView):
                             },
                         )
             except AIProviderTimeout:
+                outcome = "ai_timeout"
                 logger.warning("wizard review timed out for user %s", user_id)
                 yield sse_event("error", {"error": "ai_timeout"})
             except AIProviderError:
+                outcome = "ai_unavailable"
                 logger.exception("wizard review provider error for user %s", user_id)
                 yield sse_event("error", {"error": "ai_unavailable"})
+            except Exception:
+                outcome = "unexpected_error"
+                logger.exception("Unexpected error during wizard review for user %s", user_id)
+                yield sse_event("error", {"error": "unexpected_error"})
+            finally:
+                log_ai_usage(scope, user_id, outcome, start_time)
 
         response = StreamingHttpResponse(event_stream(), content_type="text/event-stream")
         response["Cache-Control"] = "no-cache"
@@ -154,8 +179,11 @@ class WizardGenerateView(APIView):
             )
         data = serializer.validated_data
         user_id = request.user.pk
+        scope = self.throttle_scope
 
         def event_stream():
+            start_time = time.monotonic()
+            outcome = "success"
             try:
                 for kind, value in WizardAIService().stream_generate_document(
                     data["description"], data["answers"], data.get("history", [])
@@ -173,14 +201,23 @@ class WizardGenerateView(APIView):
                             },
                         )
             except AIProviderTimeout:
+                outcome = "ai_timeout"
                 logger.warning("wizard generate timed out for user %s", user_id)
                 yield sse_event("error", {"error": "ai_timeout"})
             except AIProviderError:
+                outcome = "ai_unavailable"
                 logger.exception("wizard generate provider error for user %s", user_id)
                 yield sse_event("error", {"error": "ai_unavailable"})
             except DocumentValidationError:
+                outcome = "invalid_document"
                 logger.warning("wizard produced an invalid document for user %s", user_id)
                 yield sse_event("error", {"error": "invalid_document"})
+            except Exception:
+                outcome = "unexpected_error"
+                logger.exception("Unexpected error during wizard generate for user %s", user_id)
+                yield sse_event("error", {"error": "unexpected_error"})
+            finally:
+                log_ai_usage(scope, user_id, outcome, start_time)
 
         response = StreamingHttpResponse(event_stream(), content_type="text/event-stream")
         response["Cache-Control"] = "no-cache"
