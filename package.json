@@ -1,0 +1,20 @@
+{
+  "name": "maqueta",
+  "version": "1.0.0",
+  "description": "Django backend + AI assistant wrapped around an existing visual HTML/JSON page editor. The editor keeps all of its manual features; the AI adds a panel that turns a natural-language instruction into **validated, structured operations** you preview and apply as a single undo step. A second AI-guided flow, the **template wizard** (`/wizard/`), builds a whole page from scratch through a chat + dynamic question form instead of starting from a curated template. The editor is served behind login and same-origin, so the browser's **session cookie (with CSRF)** authenticates the API — no API key ever reaches the browser, no token/device flow needed.",
+  "main": "index.js",
+  "directories": {
+    "test": "tests"
+  },
+  "scripts": {
+    "test": "node --test tests/js/**/*.test.js",
+    "test:e2e": "playwright test tests/e2e"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "devDependencies": {
+    "@playwright/test": "^1.61.1"
+  }
+}
