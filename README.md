@@ -160,8 +160,9 @@ logged in is all that is needed — no key or connection step.
 5. Name the result (AI-suggested, editable) and **Guardar en mi galería** —
    it appears in `/gallery/` like any other saved template.
 
-No image upload yet (tracked in `BACKLOG.md`) — the wizard produces text
-content and CSS only.
+You can also attach images (step 3 or 4) — they're resized/re-encoded
+server-side and made available for the AI to place in the generated page
+(`state.assets`, never AI-authored directly — see `BACKLOG.md`).
 
 ## Security notes
 
