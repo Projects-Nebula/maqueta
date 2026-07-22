@@ -32,9 +32,14 @@ natural next steps. Checked = done.
   `highlightSelectedPreviewElement` (`editor-core.js`); `editor-ai.js` listens
   for it, rebinding on iframe `load` since `srcdoc` reload replaces
   `contentDocument`.
-- [ ] **Non-modal AI preview.** Preview currently swaps the global `state`; a
-  manual edit during preview is discarded on cancel. Make preview render from a
-  separate proposal state without touching live `state`.
+- [x] **Non-modal AI preview.** Investigated: this described dead code, not
+  the shipped UX. The real flow auto-applies AI changes immediately
+  (`commitProposal`, one undo step) with a post-hoc "Descartar" button — there
+  is no live preview stage where a manual edit could be lost. The
+  `previewProposal`/`cancelProposal`/`__aiPreviewBackup` skeleton this item
+  referred to was never wired up; removed as dead code
+  (`static/editor/editor-core.js`). If a true propose-then-confirm UX is
+  wanted later, that's a new feature, not this bugfix.
 - [ ] **Autosave projects.** Wire the editor to `POST /api/projects/{id}/revisions/`
   with debounce; persist `state` and reload on open.
 - [ ] **Registration flow.** accounts app is prepared for it but signup is not

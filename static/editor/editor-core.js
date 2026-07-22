@@ -2918,8 +2918,6 @@ ${body}
       // --- AI assistant integration facade ----------------------------------
       // Exposes a small, explicit API for editor-ai.js. Everything the AI panel
       // touches goes through here so the core editor stays untouched otherwise.
-      let __aiPreviewBackup = null;
-
       window.EditorCore = {
         getState() {
           return clone(state);
@@ -2961,27 +2959,9 @@ ${body}
             };
           });
         },
-        // ponytail: preview swaps the live state and only re-renders the iframe;
-        // a manual edit mid-preview is discarded on cancel. Fine for a modal flow.
-        previewProposal(proposalState) {
-          flushHistoryCommit();
-          if (__aiPreviewBackup === null) {
-            __aiPreviewBackup = JSON.stringify(state);
-          }
-          state = proposalState;
-          renderPreview({ immediate: true });
-        },
-        cancelProposal() {
-          if (__aiPreviewBackup !== null) {
-            state = JSON.parse(__aiPreviewBackup);
-            __aiPreviewBackup = null;
-            renderPreview({ immediate: true });
-          }
-        },
         // Commit a proposed state as a SINGLE undo step.
         commitProposal(proposalState) {
           flushHistoryCommit();
-          __aiPreviewBackup = null;
           state = proposalState;
           if (Array.isArray(selectedPath) && !getNode(selectedPath)) {
             selectedPath = null;
@@ -2994,7 +2974,6 @@ ${body}
         // the built-in defaultPage placeholder that state/historyPast boot with.
         loadSeed(proposalState) {
           flushHistoryCommit();
-          __aiPreviewBackup = null;
           state = proposalState;
           if (Array.isArray(selectedPath) && !getNode(selectedPath)) {
             selectedPath = null;
