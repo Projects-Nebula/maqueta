@@ -41,8 +41,13 @@ natural next steps. Checked = done.
   implemented yet.
 - [x] **Frontend test runner.** `npm test` runs `node --test tests/js/**/*.test.js`
   (`package.json`); wired into `.github/workflows/ci.yml`.
-- [ ] **Template thumbnails.** Gallery cards show only the first letter of the
-  name; render a real preview image or a mini render of the template `state`.
+- [x] **Template thumbnails.** Server-side mini-render (`apps/editor/rendering.py`)
+  walks `state.document.body` + `state.styles` into a standalone HTML doc, shown
+  scaled 0.25x in a `pointer-events: none` `<iframe srcdoc>` on each gallery card
+  (`templates/editor/home.html`, `gallery.html`). No new deps, no headless
+  browser at request time. Falls back to the first-letter avatar when `state`
+  is null/empty (e.g. `Template.state = None` uses the built-in default page).
+  Verified with a real Playwright screenshot against a seeded template.
 - [ ] **Image upload for the wizard.** Deliberately deferred to a second pass:
   let a user attach images while building a custom template, optimize them
   server-side (resize/compress, cap dimensions) so a heavy upload can't

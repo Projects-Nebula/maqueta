@@ -1,6 +1,8 @@
 from django.conf import settings
 from django.db import models
 
+from .rendering import thumbnail_srcdoc
+
 
 class Template(models.Model):
     """A starting page template selectable from the gallery. `state` holds the
@@ -22,6 +24,9 @@ class Template(models.Model):
     def __str__(self):
         return self.name
 
+    def thumbnail_srcdoc(self):
+        return thumbnail_srcdoc(self.state)
+
 
 class UserTemplate(models.Model):
     """A template a user saved from their own editor state."""
@@ -41,6 +46,9 @@ class UserTemplate(models.Model):
 
     def __str__(self):
         return self.name
+
+    def thumbnail_srcdoc(self):
+        return thumbnail_srcdoc(self.state)
 
 
 class UserTemplateRevision(models.Model):
