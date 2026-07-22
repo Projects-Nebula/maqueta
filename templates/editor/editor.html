@@ -6,7 +6,7 @@
   <title>Visual JSON Page Builder</title>
   <link rel="stylesheet" href="{% static 'editor/editor.css' %}">
 </head>
-<body data-user-template-id="{{ user_template_id|default:'' }}">
+<body data-user-template-id="{{ user_template_id|default:'' }}" data-project-id="{{ project_id|default:'' }}">
   <div class="app">
     <header class="topbar">
       <div class="brand">
@@ -276,6 +276,7 @@
   <script src="{% static 'editor/editor-core.js' %}"></script>
   <script src="{% static 'editor/editor-ai.js' %}"></script>
   <script src="{% static 'editor/save-template.js' %}"></script>
+  <script src="{% static 'editor/autosave.js' %}"></script>
 
   <script src="{% static 'editor/seed-loader.js' %}"></script>
 </body>

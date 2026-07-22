@@ -1,3 +1,5 @@
+import uuid
+
 from django.contrib.auth.decorators import login_required
 from django.db.models import Max
 from django.shortcuts import render
@@ -7,6 +9,8 @@ from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
+
+from apps.projects.models import Project
 
 from .models import Template, UserTemplate, UserTemplateRevision
 from .serializers import UserTemplateRevisionSerializer, UserTemplateSerializer
@@ -22,16 +26,20 @@ def editor_view(request):
     """Serve the visual editor shell with the chosen template already inlined.
 
     ``?t=<slug>`` selects a base ``Template`` (global catalog); ``?ut=<id>``
-    selects the current user's own ``UserTemplate`` (owner-scoped). Its
-    ``state`` is injected server-side (via ``json_script``) so the page
-    arrives with the data already present — the client applies it
-    synchronously, no fetch. A null/absent state means "use the editor's
-    built-in default page". ``ensure_csrf_cookie`` sets the ``csrftoken``
-    cookie for the AI panel's API calls; ``never_cache`` keeps the per-query
-    HTML from being reused for a different template.
+    selects the current user's own ``UserTemplate`` (owner-scoped); ``?p=<id>``
+    selects an owner-scoped ``Project``, autosaved via
+    ``static/editor/autosave.js`` — its current content is its latest
+    ``ProjectRevision`` if one exists, else the project's own (initially
+    empty) ``state``. Its ``state`` is injected server-side (via
+    ``json_script``) so the page arrives with the data already present — the
+    client applies it synchronously, no fetch. A null/absent state means "use
+    the editor's built-in default page". ``ensure_csrf_cookie`` sets the
+    ``csrftoken`` cookie for the AI panel's API calls; ``never_cache`` keeps
+    the per-query HTML from being reused for a different template.
     """
     slug = request.GET.get("t")
     ut_id = request.GET.get("ut")
+    project_id = request.GET.get("p")
     state = None
     user_template_id = None
     if slug:
@@ -41,10 +49,26 @@ def editor_view(request):
         if user_template:
             state = user_template.state
             user_template_id = user_template.id
+    elif project_id:
+        try:
+            uuid.UUID(project_id)
+        except ValueError:
+            project_id = None
+        else:
+            project = Project.objects.filter(owner=request.user, pk=project_id).first()
+            if project:
+                latest_revision = project.revisions.order_by("-version").first()
+                state = latest_revision.state if latest_revision else project.state
+            else:
+                project_id = None
     return render(
         request,
         "editor/editor.html",
-        {"template_state": state, "user_template_id": user_template_id},
+        {
+            "template_state": state,
+            "user_template_id": user_template_id,
+            "project_id": project_id,
+        },
     )
 
 

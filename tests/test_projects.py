@@ -1,5 +1,7 @@
 import pytest
 
+from apps.projects.views import REVISION_RETENTION_LIMIT
+
 pytestmark = pytest.mark.django_db
 
 URL = "/api/projects/"
@@ -43,3 +45,17 @@ def test_create_and_list_revisions(api):
     listed = api.get(f"{URL}{project_id}/revisions/")
     assert listed.status_code == 200
     assert len(listed.json()) == 1
+
+
+def test_revision_history_is_capped_at_retention_limit(api):
+    project_id = _create(api)
+    for i in range(REVISION_RETENTION_LIMIT + 6):
+        response = api.post(f"{URL}{project_id}/revisions/", {"state": {"v": i}}, format="json")
+        assert response.status_code == 201
+
+    listed = api.get(f"{URL}{project_id}/revisions/")
+    assert listed.status_code == 200
+    assert len(listed.json()) == REVISION_RETENTION_LIMIT
+    versions = sorted(r["version"] for r in listed.json())
+    assert versions[0] == 7
+    assert versions[-1] == REVISION_RETENTION_LIMIT + 6

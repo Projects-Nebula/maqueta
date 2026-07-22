@@ -862,6 +862,10 @@
 
         historyFuture = [];
         updateHistoryButtons();
+        // A consumer-agnostic "state changed" signal (autosave.js listens for
+        // this) — fires whenever a snapshot actually lands in history, so it
+        // naturally follows the same debounce/immediate-flush timing.
+        document.dispatchEvent(new CustomEvent("vjpb:state-committed"));
       }
 
       function scheduleHistoryCommit() {

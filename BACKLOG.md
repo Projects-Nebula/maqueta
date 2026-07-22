@@ -40,8 +40,15 @@ natural next steps. Checked = done.
   referred to was never wired up; removed as dead code
   (`static/editor/editor-core.js`). If a true propose-then-confirm UX is
   wanted later, that's a new feature, not this bugfix.
-- [ ] **Autosave projects.** Wire the editor to `POST /api/projects/{id}/revisions/`
-  with debounce; persist `state` and reload on open.
+- [x] **Autosave projects.** `?p=<uuid>` now loads a `Project` in the editor
+  (`apps/editor/views.py`, latest `ProjectRevision` if one exists, else the
+  project's own `state`). `editor-core.js` dispatches `vjpb:state-committed`
+  whenever a history snapshot lands (reuses the existing debounce/flush
+  points, no new hook into its internals); `static/editor/autosave.js`
+  listens, debounces 3s, and `POST`s `/api/projects/{id}/revisions/`. Added
+  the same revision-retention cap (20) to `apps/projects/views.py` that
+  `UserTemplate` already has. Verified end-to-end with a real Playwright run
+  (edit → wait past debounce → revision persisted via the API).
 - [ ] **Registration flow.** accounts app is prepared for it but signup is not
   implemented yet.
 - [x] **Frontend test runner.** `npm test` runs `node --test tests/js/**/*.test.js`

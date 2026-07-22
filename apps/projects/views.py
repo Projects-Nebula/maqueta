@@ -9,6 +9,10 @@ from rest_framework.response import Response
 from .models import Project
 from .serializers import ProjectRevisionSerializer, ProjectSerializer
 
+# History grows unbounded otherwise (e.g. debounced autosave) — keep the most
+# recent N per project.
+REVISION_RETENTION_LIMIT = 20
+
 
 class ProjectViewSet(viewsets.ModelViewSet):
     serializer_class = ProjectSerializer
@@ -34,4 +38,8 @@ class ProjectViewSet(viewsets.ModelViewSet):
         serializer.is_valid(raise_exception=True)
         next_version = (project.revisions.aggregate(top=Max("version"))["top"] or 0) + 1
         revision = serializer.save(project=project, version=next_version, user=request.user)
+        keep_ids = project.revisions.order_by("-version").values_list("pk", flat=True)[
+            :REVISION_RETENTION_LIMIT
+        ]
+        project.revisions.exclude(pk__in=list(keep_ids)).delete()
         return Response(ProjectRevisionSerializer(revision).data, status=status.HTTP_201_CREATED)
