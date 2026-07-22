@@ -21,10 +21,18 @@ Pending work first, then everything already done. Checked = done.
   request failed"` (400) — confirmed not a protocol issue on our side.
   Follow up with opencode.ai support before retrying.
 - [ ] **Expand the CSS property allowlist** as real templates need it (kept
-  intentionally tight in `sanitize.py`). Ongoing — several safe properties
-  (`-webkit-font-smoothing`, `backdrop-filter`, `align-self`,
-  `scroll-behavior`, `overflow-x`/`-y`, and others) were already added as
-  the AI legitimately needed them; expect more.
+  intentionally tight in `sanitize.py`). Ongoing, never fully "done" by
+  design — most recently added `background-position/-size/-repeat`,
+  `inset`, `filter`, `outline`/`outline-color`/`outline-offset`,
+  `text-overflow`, `-webkit-line-clamp`/`-webkit-box-orient`,
+  `grid-column`/`-row`/`-area`/`grid-template-areas`,
+  `flex-grow`/`-shrink`/`-basis`, `order`, `float`, `clear` — real gaps
+  completing property groups that were already half-present
+  (`background-image` with no position/size/repeat, individual
+  top/right/bottom/left with no `inset` shorthand, etc). No new failure
+  triggered this round — added proactively since they were an obvious,
+  low-risk completion of existing groups; expect more as concrete AI
+  failures surface.
 - [ ] **Extract a shared SSE/reasoning-display module.** `template-wizard.js`
   deliberately duplicates `editor-ai.js`'s SSE-parsing and typing-bubble
   logic instead of extracting it, to avoid risking a regression in the

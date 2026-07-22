@@ -100,6 +100,30 @@ def test_disallowed_css_property_in_rules_rejected():
         sanitize_document(doc)
 
 
+def test_recently_expanded_css_properties_are_allowed():
+    doc = copy.deepcopy(VALID_DOCUMENT)
+    doc["styles"]["rules"].append(
+        {
+            "selector": ".card",
+            "declarations": {
+                "background-position": "center",
+                "background-size": "cover",
+                "background-repeat": "no-repeat",
+                "inset": "0",
+                "filter": "blur(4px)",
+                "outline-offset": "2px",
+                "text-overflow": "ellipsis",
+                "-webkit-line-clamp": "2",
+                "grid-column": "span 2",
+                "flex-basis": "50%",
+                "order": "1",
+                "float": "left",
+            },
+        }
+    )
+    sanitize_document(doc)
+
+
 def test_unsafe_css_selector_rejected():
     doc = copy.deepcopy(VALID_DOCUMENT)
     bad_rule = {"selector": "h1{}</style><script>", "declarations": {"color": "red"}}
