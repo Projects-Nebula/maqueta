@@ -175,3 +175,49 @@ def test_dangling_keys_on_style_rule_rejected():
     doc["styles"]["rules"][0]["extra"] = "nope"
     with pytest.raises(DocumentValidationError):
         sanitize_document(doc)
+
+
+def test_valid_media_query_passes():
+    doc = copy.deepcopy(VALID_DOCUMENT)
+    doc["styles"]["mediaQueries"] = [
+        {
+            "query": "(max-width: 640px)",
+            "rules": [{"selector": "h1", "declarations": {"font-size": "20px"}}],
+        }
+    ]
+    sanitize_document(doc)
+
+
+def test_media_query_injection_rejected():
+    doc = copy.deepcopy(VALID_DOCUMENT)
+    doc["styles"]["mediaQueries"] = [{"query": "screen) {} body{}</style><script>", "rules": []}]
+    with pytest.raises(DocumentValidationError):
+        sanitize_document(doc)
+
+
+def test_media_query_dangling_keys_rejected():
+    doc = copy.deepcopy(VALID_DOCUMENT)
+    doc["styles"]["mediaQueries"] = [{"query": "(max-width: 640px)", "rules": [], "extra": "nope"}]
+    with pytest.raises(DocumentValidationError):
+        sanitize_document(doc)
+
+
+def test_media_query_nested_rule_disallowed_property_rejected():
+    doc = copy.deepcopy(VALID_DOCUMENT)
+    doc["styles"]["mediaQueries"] = [
+        {
+            "query": "(max-width: 640px)",
+            "rules": [{"selector": "body", "declarations": {"behavior": "url(evil.htc)"}}],
+        }
+    ]
+    with pytest.raises(DocumentValidationError):
+        sanitize_document(doc)
+
+
+def test_too_many_media_queries_rejected():
+    doc = copy.deepcopy(VALID_DOCUMENT)
+    doc["styles"]["mediaQueries"] = [
+        {"query": f"(min-width: {i}px)", "rules": []} for i in range(11)
+    ]
+    with pytest.raises(DocumentValidationError):
+        sanitize_document(doc)

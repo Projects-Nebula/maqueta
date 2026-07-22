@@ -34,20 +34,31 @@ def _render_node(node: dict) -> str:
     return f"<{tag}{attrs}>{children}</{tag}>"
 
 
-def _render_styles(styles: dict) -> str:
-    variables = styles.get("variables") or {}
-    rules = styles.get("rules") or []
+def _render_rule_list(rules) -> list[str]:
     lines = []
-    if variables:
-        var_decls = "; ".join(f"{name}: {value}" for name, value in variables.items())
-        lines.append(f":root {{ {var_decls} }}")
-    for rule in rules:
+    for rule in rules or []:
         selector = rule.get("selector")
         declarations = rule.get("declarations") or {}
         if not selector or not declarations:
             continue
         decls = "; ".join(f"{prop}: {value}" for prop, value in declarations.items())
         lines.append(f"{selector} {{ {decls} }}")
+    return lines
+
+
+def _render_styles(styles: dict) -> str:
+    variables = styles.get("variables") or {}
+    lines = []
+    if variables:
+        var_decls = "; ".join(f"{name}: {value}" for name, value in variables.items())
+        lines.append(f":root {{ {var_decls} }}")
+    lines.extend(_render_rule_list(styles.get("rules")))
+    for group in styles.get("mediaQueries") or []:
+        query = group.get("query")
+        nested = _render_rule_list(group.get("rules"))
+        if not query or not nested:
+            continue
+        lines.append(f"@media {query} {{ {' '.join(nested)} }}")
     return "\n".join(lines)
 
 

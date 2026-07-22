@@ -233,15 +233,22 @@ página (descripción del usuario, respuestas del formulario).
 
 Responde EXCLUSIVAMENTE con un objeto JSON con esta forma EXACTA:
 {"styles": {"variables": {"--color-primary":"#..."}, "rules": [
-  {"selector":"...", "declarations": {"propiedad":"valor"}}], "keyframes": []}}
+  {"selector":"...", "declarations": {"propiedad":"valor"}}],
+  "mediaQueries": [{"query":"(max-width: 640px)", "rules": [
+    {"selector":"...", "declarations": {"propiedad":"valor"}}]}],
+  "keyframes": []}}
 
 Reglas estrictas:
 - Escribí un selector por CADA clase relevante que aparece en el árbol del
   body recibido — no dejes clases sin estilizar.
-- "styles.rules" es una lista PLANA de {selector, declarations} — NO existe
-  soporte para "@media" ni reglas anidadas. NUNCA uses "@media (...)" como
-  selector ni metas un selector CSS como si fuera una declaración. Diseñá
-  para un solo layout (no hace falta responsive con breakpoints todavía).
+- "styles.rules" es una lista PLANA de {selector, declarations} para el
+  layout base (desktop-first). NUNCA uses "@media (...)" como selector ni
+  metas un selector CSS como si fuera una declaración.
+- "styles.mediaQueries" es OPCIONAL: una lista de grupos
+  {"query": "(max-width: 640px)", "rules": [{selector, declarations}]} para
+  ajustes responsive puntuales (columnas que pasan a una sola, tipografía
+  más chica, paddings reducidos). No es obligatorio usarla si el layout base
+  ya funciona bien en mobile; no abuses de breakpoints innecesarios.
 - "styles.keyframes" va SIEMPRE vacío ([]) — no agregues animaciones.
 - Da estilo completo: layout con flex/grid, colores coherentes con el rubro
   descrito, tipografía, espaciado — que se vea terminada, no un esqueleto.

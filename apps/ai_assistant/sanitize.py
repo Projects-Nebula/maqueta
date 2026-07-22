@@ -117,12 +117,17 @@ MAX_TEXT_LENGTH = 20000
 # Limits on a full generated document's styles block (see document_validation.py).
 MAX_STYLE_VARIABLES = 100
 MAX_STYLE_RULES = 200
+MAX_MEDIA_QUERIES = 10
 
 CSS_VAR_RE = re.compile(r"^--[a-z0-9-]+$", re.IGNORECASE)
 # CSS selectors are interpolated directly into a stylesheet string client-side
 # (editor-core.js's ensureRule) — block characters that could break out of a
 # selector into raw CSS/HTML.
 CSS_SELECTOR_FORBIDDEN = re.compile(r"[<>{};]")
+# A media query is interpolated raw into `@media <query> { ... }`
+# (editor-core.js's buildCss) — allowlist instead of denylist since this sits
+# right next to the `{` that opens a nested block.
+CSS_MEDIA_QUERY_ALLOWED = re.compile(r"^[a-zA-Z0-9\s(),.:-]+$")
 
 
 class SanitizationError(ValueError):
@@ -177,6 +182,13 @@ def check_css_selector(selector: str) -> None:
         raise SanitizationError("selector required")
     if CSS_SELECTOR_FORBIDDEN.search(selector):
         raise SanitizationError(f"unsafe CSS selector: {selector}")
+
+
+def check_css_media_query(query: str) -> None:
+    if not isinstance(query, str) or not query.strip():
+        raise SanitizationError("media query required")
+    if not CSS_MEDIA_QUERY_ALLOWED.match(query):
+        raise SanitizationError(f"unsafe media query: {query}")
 
 
 def check_attributes(attributes: dict) -> None:

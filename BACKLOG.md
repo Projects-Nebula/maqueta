@@ -88,10 +88,20 @@ natural next steps. Checked = done.
   (`-webkit-font-smoothing`, `backdrop-filter`, `align-self`,
   `scroll-behavior`, `overflow-x`/`-y`, and others) were already added as
   the AI legitimately needed them; expect more.
-- [ ] **`styles.rules` gained no `@media` support.** The wizard prompt tells
-  the AI not to attempt responsive breakpoints (it has no way to express
-  them in the current flat `{selector, declarations}` shape) — add real
-  nested/media-query support if responsive AI-generated pages matter.
+- [x] **`styles.rules` gained no `@media` support.** Turned out
+  `editor-core.js`'s `buildCss()` already rendered `styles.mediaQueries`
+  (dead code, never populated) — and it was completely unvalidated on the
+  Python side, a latent CSS-injection gap (an AI response or a manual
+  UserTemplate save could smuggle arbitrary text into a raw
+  `@media ${query} { ... }` string). Fixed both at once:
+  `document_validation.py` now validates `styles.mediaQueries` (allowlisted
+  query string via new `check_css_media_query`, nested rules reuse the same
+  `{selector, declarations}` checks as top-level rules); the wizard styles
+  prompt now tells the AI it can use it, optionally, for real breakpoints;
+  `apps/editor/rendering.py`'s thumbnail renderer stays consistent. Scope
+  note: this only covers the wizard's full-document generation — the
+  editor's incremental AI-transform has no per-declaration operation type
+  for media queries, so that path is unchanged (out of scope here).
 - [ ] **Extract a shared SSE/reasoning-display module.** `template-wizard.js`
   deliberately duplicates `editor-ai.js`'s SSE-parsing and typing-bubble
   logic instead of extracting it, to avoid risking a regression in the

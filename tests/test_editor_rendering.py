@@ -1,10 +1,14 @@
 from apps.editor.rendering import thumbnail_srcdoc
 
 
-def _state(children=None, rules=None, variables=None):
+def _state(children=None, rules=None, variables=None, media_queries=None):
     return {
         "document": {"body": {"attributes": {}, "children": children or []}},
-        "styles": {"variables": variables or {}, "rules": rules or []},
+        "styles": {
+            "variables": variables or {},
+            "rules": rules or [],
+            "mediaQueries": media_queries or [],
+        },
     }
 
 
@@ -56,3 +60,17 @@ def test_includes_style_rules_and_variables():
     html = thumbnail_srcdoc(state)
     assert "div { color: red }" in html
     assert "--accent: #123456" in html
+
+
+def test_includes_media_query_rules():
+    state = _state(
+        children=[{"type": "element", "tag": "div", "attributes": {}, "children": []}],
+        media_queries=[
+            {
+                "query": "(max-width: 640px)",
+                "rules": [{"selector": "div", "declarations": {"font-size": "12px"}}],
+            }
+        ],
+    )
+    html = thumbnail_srcdoc(state)
+    assert "@media (max-width: 640px) { div { font-size: 12px } }" in html

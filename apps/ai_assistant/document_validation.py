@@ -15,10 +15,12 @@ the injection surface sanitize.py's node-tree checks are designed to close.
 from __future__ import annotations
 
 from .sanitize import (
+    MAX_MEDIA_QUERIES,
     MAX_STYLE_RULES,
     MAX_STYLE_VARIABLES,
     SanitizationError,
     check_css_declaration,
+    check_css_media_query,
     check_css_selector,
     check_css_variable,
     sanitize_node,
@@ -104,6 +106,22 @@ def _check_html_attributes(attrs):
     _require(attrs.get("dir") in ("ltr", "rtl"), "invalid dir")
 
 
+def _check_rule_list(rules, *, label):
+    _require(isinstance(rules, list), f"{label} must be a list")
+    _require(len(rules) <= MAX_STYLE_RULES, f"too many rules in {label}")
+    for rule in rules:
+        _require(isinstance(rule, dict), f"each rule in {label} must be an object")
+        _require(
+            set(rule.keys()) == {"selector", "declarations"},
+            f"unexpected keys in {label} rule: {sorted(rule.keys())}",
+        )
+        check_css_selector(rule.get("selector"))
+        declarations = rule.get("declarations", {})
+        _require(isinstance(declarations, dict), f"{label} rule declarations must be an object")
+        for prop, value in declarations.items():
+            check_css_declaration(prop, value)
+
+
 def _check_styles(styles):
     _require(isinstance(styles, dict), "styles must be an object")
 
@@ -113,20 +131,21 @@ def _check_styles(styles):
     for name, value in variables.items():
         check_css_variable(name, value)
 
-    rules = styles.get("rules", [])
-    _require(isinstance(rules, list), "styles.rules must be a list")
-    _require(len(rules) <= MAX_STYLE_RULES, "too many style rules")
-    for rule in rules:
-        _require(isinstance(rule, dict), "each style rule must be an object")
+    _check_rule_list(styles.get("rules", []), label="styles.rules")
+
+    # Rules nested under a single, validated media-query condition — the
+    # only form of responsiveness the AI can express (prompts.py).
+    media_queries = styles.get("mediaQueries", [])
+    _require(isinstance(media_queries, list), "styles.mediaQueries must be a list")
+    _require(len(media_queries) <= MAX_MEDIA_QUERIES, "too many media queries")
+    for group in media_queries:
+        _require(isinstance(group, dict), "each media query group must be an object")
         _require(
-            set(rule.keys()) == {"selector", "declarations"},
-            f"unexpected keys in style rule: {sorted(rule.keys())}",
+            set(group.keys()) == {"query", "rules"},
+            f"unexpected keys in media query group: {sorted(group.keys())}",
         )
-        check_css_selector(rule.get("selector"))
-        declarations = rule.get("declarations", {})
-        _require(isinstance(declarations, dict), "rule declarations must be an object")
-        for prop, value in declarations.items():
-            check_css_declaration(prop, value)
+        check_css_media_query(group.get("query"))
+        _check_rule_list(group.get("rules", []), label="a styles.mediaQueries group")
 
     # Keyframes add selector-injection-style surface (percentage steps, nested
     # declarations) for no real payoff on a first-generation static page —
