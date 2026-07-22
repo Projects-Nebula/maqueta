@@ -1,0 +1,70 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: editor
+          POSTGRES_USER: editor
+          POSTGRES_PASSWORD: editor
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U editor"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgres://editor:editor@localhost:5432/editor
+      DJANGO_SETTINGS_MODULE: config.settings.development
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        run: uv python install
+
+      - name: Install Python dependencies
+        run: uv sync
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: ruff check
+        run: uv run ruff check .
+
+      - name: ruff format --check
+        run: uv run ruff format --check .
+
+      - name: Django system check
+        run: uv run python manage.py check
+
+      - name: makemigrations --check
+        run: uv run python manage.py makemigrations --check --dry-run
+
+      - name: pytest
+        run: uv run pytest
+
+      - name: Node unit test
+        run: node --test tests/js/**/*.test.js
+
+  docker-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build Docker image
+        run: docker build -t maqueta:ci .
