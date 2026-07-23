@@ -24,6 +24,11 @@ urlpatterns = [
     path("productos/", products_view, name="products"),
     path("config/", payment_config_view, name="payment-config"),
     path("comprar/<int:product_id>/<str:gateway>/", CheckoutView.as_view(), name="checkout"),
+    # Legacy, pre-multi-gateway buy buttons (baked into a UserTemplate's
+    # saved state from before this URL required a gateway segment) still
+    # point at this shape — CheckoutView falls back to the seller's first
+    # enabled gateway rather than 404ing an already-published page's button.
+    path("comprar/<int:product_id>/", CheckoutView.as_view(), name="checkout-legacy"),
     path("pagar/payu/redirect/", payu_redirect_view, name="payu-redirect"),
     path("gracias/", SuccessView.as_view(), name="success"),
     path("cancelado/", checkout_cancel_view, name="checkout-cancel"),

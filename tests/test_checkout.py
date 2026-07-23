@@ -131,3 +131,24 @@ def test_checkout_uses_a_different_owners_gateway_config_correctly(anon_api, use
     own_product = Product.objects.create(owner=user, name="Ebook", price_cents=1999)
     response = anon_api.post(URL.format(own_product.id, "mercadopago"))
     assert response.status_code == 404
+
+
+def test_checkout_legacy_url_without_gateway_falls_back_to_first_enabled(anon_api, user):
+    # A buy button baked into a UserTemplate's saved state from before the
+    # multi-gateway checkout shipped points at /comprar/<id>/ with no
+    # gateway segment (reproduced live: an already-published page 404'd
+    # after this session's multi-gateway migration). Must still work.
+    product = Product.objects.create(owner=user, name="Ebook", price_cents=1999)
+    PaymentGatewayConfig.objects.create(owner=user, gateway="wompi", is_enabled=True)
+    _enable_gateway(user, "mercadopago")
+    response = anon_api.post(f"/comprar/{product.id}/")
+    assert response.status_code == 302
+    # Deterministic: alphabetically first of the seller's enabled gateways.
+    order = Order.objects.get(product=product)
+    assert order.gateway == "mercadopago"  # "mercadopago" < "wompi" alphabetically
+
+
+def test_checkout_legacy_url_404s_when_seller_has_nothing_enabled(anon_api, user):
+    product = Product.objects.create(owner=user, name="Ebook", price_cents=1999)
+    response = anon_api.post(f"/comprar/{product.id}/")
+    assert response.status_code == 404

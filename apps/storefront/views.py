@@ -155,6 +155,12 @@ class CheckoutView(APIView):
     decorator above. Not a problem here: permission_classes is already
     AllowAny, so there's no reason to authenticate the requester at all for
     this public, unauthenticated action.
+
+    `gateway` is optional (see the `checkout-legacy` URL): a buy button
+    baked into a UserTemplate's saved state from before the multi-gateway
+    checkout shipped still points at `/comprar/<id>/` with no gateway
+    segment — rather than 404ing an already-published page's button, fall
+    back to the seller's first enabled gateway (deterministic order).
     """
 
     permission_classes = [AllowAny]
@@ -162,11 +168,20 @@ class CheckoutView(APIView):
     throttle_classes = [ScopedRateThrottle]
     throttle_scope = "checkout_session_create"
 
-    def post(self, request, product_id, gateway):
-        if gateway not in GATEWAY_REGISTRY:
-            raise Http404
+    def post(self, request, product_id, gateway=None):
         product = Product.objects.filter(pk=product_id, is_active=True).first()
         if not product:
+            raise Http404
+        if gateway is None:
+            fallback = (
+                PaymentGatewayConfig.objects.filter(owner_id=product.owner_id, is_enabled=True)
+                .order_by("gateway")
+                .first()
+            )
+            if not fallback:
+                raise Http404
+            gateway = fallback.gateway
+        if gateway not in GATEWAY_REGISTRY:
             raise Http404
         config = _gateway_config_for(product.owner_id, gateway)
         if not config or not config.is_enabled:
