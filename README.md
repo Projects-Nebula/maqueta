@@ -52,10 +52,11 @@ Request flow for the template wizard (`/wizard/`):
    `ready` or asks one clarifying question via chat (looped, capped at 5
    rounds).
 3. Once ready, `POST /api/ai/wizard/generate/` produces the page in two AI
-   calls — structure (the HTML tree) first, then styles (CSS for the
-   classes that structure introduced) — reducing how often a single huge
-   generation gets cut off mid-response. The assembled document is
-   validated whole (`document_validation.py`) before it's ever returned.
+   calls — structure (the HTML tree, styled inline with Tailwind utility
+   classes) first, then just the brand-color palette (`styles.variables`) —
+   reducing how often a single huge generation gets cut off mid-response.
+   The assembled document is validated whole (`document_validation.py`)
+   before it's ever returned.
 4. The client saves the result through the **already-existing**
    `POST /api/user-templates/` endpoint — the wizard has no persistence of
    its own, it just produces a document the normal save flow already knows
@@ -65,6 +66,7 @@ Request flow for the template wizard (`/wizard/`):
 
 - Python 3.12
 - [uv](https://docs.astral.sh/uv/) (`curl -LsSf https://astral.sh/uv/install.sh | sh`)
+- Node 20+ (Tailwind CSS build — `npm install && npm run build:css`)
 - Docker + Docker Compose (optional, for the reproducible stack)
 
 ## Local setup
@@ -169,8 +171,9 @@ server-side and made available for the AI to place in the generated page
 - Auth is the Django session (same-origin) + CSRF; the AI endpoint requires an
   authenticated session and rejects requests without a valid `X-CSRFToken`.
 - The AI can never emit scripts, `on*` handlers, `iframe/object/embed`,
-  `javascript:`/`data:text/html` URLs, or non-allowlisted CSS — enforced
-  server-side in `sanitize.py` + `operations.py` (incremental edits) and
+  `javascript:`/`data:text/html` URLs, or a non-allowlisted Tailwind class
+  (`apps/ai_assistant/tailwind_classes.py`) — enforced server-side in
+  `sanitize.py` + `operations.py` (incremental edits) and
   `document_validation.py` (whole documents from the wizard), independent
   of the model. A malformed AI response may get a best-effort JSON-syntax
   repair (`json-repair`), but the repaired result still goes through the

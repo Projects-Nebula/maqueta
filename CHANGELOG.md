@@ -8,6 +8,39 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **Tailwind CSS migration.** Styling moved from a custom JSON DSL
+  (`styles.rules`: AI/editor-authored `{selector, declarations}` objects) to
+  Tailwind utility classes on each node's `attributes.class`. Full plan and
+  rationale in `REFACTOR.md`.
+  - `apps/ai_assistant/tailwind_classes.py` — the finite Tailwind class
+    allowlist (`is_allowed_tailwind_class`/`check_class_list`), the same
+    security role `CSS_PROPERTY_ALLOWLIST` played before. Wired into
+    `operations.py` (`set_attribute`/`class`) and `sanitize.py`
+    (`check_attributes`, used by full-document validation and
+    `add_node`/`replace_node`).
+  - Tailwind v4 CLI build pipeline (`npm run build:css`): a management
+    command (`generate_tailwind_safelist`) materializes the allowlist into a
+    sentinel file Tailwind treats as its only content source
+    (`tailwind-input.css`'s `@import "tailwindcss" source(none)` +
+    `@source`) — necessary because AI-chosen class names never appear in
+    any file Tailwind could otherwise scan, and because Tailwind's default
+    whole-project auto-scan turned out to compile literally any
+    Tailwind-shaped string found anywhere, including test fixtures.
+  - The wizard's document generation now authors classes inline during
+    structure generation instead of a separate CSS-rules-writing phase; the
+    second AI call is repurposed to only set the brand-color palette
+    (`styles.variables`).
+  - The editor's per-element "Estilo rápido" quick-style panel now toggles
+    Tailwind classes instead of writing an inline `style=""` attribute (a
+    second, previously-undocumented styling mechanism this migration
+    consolidated away).
+  - `styles.rules`/`mediaQueries`/`keyframes` remain in the schema and keep
+    rendering for backward compatibility with every pre-migration
+    `Template`/`UserTemplate`/`Project` row — verified end-to-end (a
+    hand-seeded legacy document still renders its old CSS, its gallery
+    thumbnail, and remains editable). New content never writes to them;
+    `set_css_declaration`/`remove_css_declaration` stay valid operations
+    only for editing that legacy content.
 - **AI-guided template wizard** (`/wizard/`). Lets a user build a custom
   template from scratch instead of only picking a curated one: a chat asks
   what page they want, the AI generates a tailored question form
@@ -82,6 +115,10 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **Docker build now installs Node 20** (build stage only, never in the
+  runtime image) to run the Tailwind CSS build. Debian bookworm's `apt`
+  `nodejs` package is 18.x, too old for Tailwind v4 — installed from
+  NodeSource instead.
 - **`AI_MAX_OPERATIONS` raised again, 50 → 150**, and a new
   **`AI_MAX_OUTPUT_TOKENS`** setting (32000) caps model output tokens
   explicitly — long generations (especially full-document wizard output)

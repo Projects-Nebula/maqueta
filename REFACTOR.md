@@ -1,5 +1,16 @@
 # REFACTOR.md — Migrate styling to Tailwind CSS
 
+> **Status: executed, 2026-07-22.** All 8 phases in Section 4 shipped —
+> commits `a0e2dcb` (Phases 1-2), `7dbeb8c` (Phase 3), `7762ba5` (Phase 4),
+> `f3f5490` (Phases 5-6), `41fdfd4` (Phase 7), plus the Phase 8
+> backward-compatibility check (verified live, not just asserted). See
+> `CHANGELOG.md`'s Unreleased section and `BACKLOG.csv` row `Tailwind CSS
+> migration` for the outcome summary, and `learnings.jsonl` for concrete
+> findings surfaced while executing this (Tailwind's default whole-project
+> content auto-scan, Node version requirements, OKLCH color output). This
+> document is kept as the historical plan/rationale — the "why" behind the
+> architecture, not a live task list anymore.
+
 **Audience**: an agent executing this refactor end to end, autonomously,
 without stopping for clarification. Every decision that would normally be
 "ask the user" has already been made below — follow it as written. If you
@@ -7,13 +18,13 @@ hit a fact about the codebase that contradicts something stated here,
 trust the code and adapt, but do not silently change the target
 architecture (Section 1) without flagging it loudly in your final report.
 
-**Definition of done**: every phase in Section 4 checked off, every test in
-Section 9 passing, the manual verification checklist in Section 10 run for
-real (browser, not just unit tests), `BACKLOG.csv` and `AGENTS.md` updated,
-one commit per phase (see `work-unit-commits` convention already used in
-this repo's git history — `git log --oneline` shows the pattern: one
-focused commit per feature, Conventional Commits, no
-`Co-Authored-By`/AI-attribution trailers).
+**Definition of done**: every phase in Section 4 checked off, its tests
+passing, the backward-compatibility check (Phase 8) run for real (browser,
+not just unit tests), `BACKLOG.csv` and `AGENTS.md` updated, one commit per
+phase (see `work-unit-commits` convention already used in this repo's git
+history — `git log --oneline` shows the pattern: one focused commit per
+feature, Conventional Commits, no `Co-Authored-By`/AI-attribution
+trailers).
 
 ---
 
