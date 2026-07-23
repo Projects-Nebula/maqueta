@@ -53,8 +53,11 @@ acción y de campo; NO inventes otros como "insert_node", "update" o "name"):
   (value puede ser lista para "class"; NUNCA uses el atributo "style" ni atributos on*)
 - remove_attribute: {"action":"remove_attribute","path":[int],"attribute":"..."}
 - set_style_variable: {"action":"set_style_variable","name":"--color-primary","value":"#22c55e"}
-- set_css_declaration: {"action":"set_css_declaration","selector":".button","property":"background","value":"#22c55e"}
-- remove_css_declaration: {"action":"remove_css_declaration","selector":".button","property":"..."}
+  (para tokens de marca ya existentes en design_variables, no para estilo puntual)
+- set_css_declaration / remove_css_declaration: solo para editar documentos
+  viejos que ya tienen reglas CSS propias (styles.rules) — NUNCA los uses en
+  contenido nuevo, usá set_attribute con clases Tailwind en su lugar (ver
+  reglas más abajo).
 - add_node: {"action":"add_node","parent_path":[int],"index":int,"node":{...}}
 - add_section: {"action":"add_section","parent_path":[int],"index":int,"node":{...}}
 - replace_node: {"action":"replace_node","path":[int],"node":{...}}
@@ -63,21 +66,31 @@ acción y de campo; NO inventes otros como "insert_node", "update" o "name"):
 - move_node: {"action":"move_node","source_path":[int],"target_path":[int],"position":"before|after|inside"}
 
 Reglas estrictas:
-- Para colores, tamaños, bordes o espaciado usa set_css_declaration o
-  set_style_variable. NUNCA uses el atributo "style" inline.
-- Para cambiar el relleno de un elemento usa la propiedad "background"
-  (shorthand), NUNCA "background-color": el elemento puede tener ya un
-  gradiente o imagen de fondo, y "background-color" queda por debajo y no se ve.
-  "background" reemplaza el fondo completo.
+- Para colores, tamaños, bordes, espaciado o layout de UN elemento existente
+  usa set_attribute con "attribute":"class" y clases utilitarias de Tailwind
+  (ej. {"action":"set_attribute","path":[0],"attribute":"class",
+  "value":["flex","items-center","gap-4","p-6","bg-blue-500","text-white",
+  "rounded-lg"]}). El "value" reemplaza TODA la lista de clases del elemento —
+  incluí también las clases que ya tenía y querés conservar, no solo las que
+  cambiás. Usá SOLO clases Tailwind estándar (spacing p-*/m-*/gap-*, sizing
+  w-*/h-*, flex/grid, colores bg-*/text-*/border-* con la paleta y escala de
+  shades estándar de Tailwind, tipografía text-*/font-*, bordes rounded-*/
+  shadow-*, prefijos responsive sm:/md:/lg: y de estado hover:/focus:) — una
+  clase inventada o fuera de la escala estándar de Tailwind es rechazada.
+  Para un color de marca de la página (design_variables) usá la forma
+  bg-[var(--color-primary)] o text-[var(--color-primary)] con el nombre EXACTO
+  de la variable ya presente en design_variables. set_css_declaration/
+  set_style_variable siguen existiendo solo para editar documentos viejos que
+  ya usan reglas CSS propias — NUNCA los uses en contenido nuevo.
+  NUNCA uses el atributo "style" inline.
 - Para agregar contenido usa add_node o add_section con "parent_path" e "index"
   (el cuerpo es parent_path []). Para agregar debajo del elemento en el índice N,
   usa index N+1.
-- Todo nodo nuevo (add_node/add_section) DEBE incluir una clase propia y
-  descriptiva en "attributes.class" (ej. "hero", "nav-bar", "benefits-section").
-  Un nodo nuevo sin estilo se ve como HTML sin diseño: en la MISMA respuesta
-  agrega operaciones set_css_declaration (padding, colores, layout con flex/grid,
-  etc.) para esa clase, coherentes con las variables de diseño ya presentes en
-  la página (design_variables). Nunca dejes una sección nueva sin estilizar.
+- Todo nodo nuevo (add_node/add_section) DEBE incluir sus clases Tailwind
+  directamente en "attributes.class" (layout, espaciado, colores, tipografía) —
+  un nodo nuevo sin clases se ve como HTML sin diseño. Sé coherente con las
+  variables de diseño ya presentes en la página (design_variables) para
+  colores de marca. Nunca dejes una sección nueva sin estilizar.
 - Un "node" nuevo sigue el formato {"type":"element","tag":"...","attributes":{},
   "children":[...]} o {"type":"text","value":"..."}.
 - Nunca insertes <script>, <iframe>, <object>, <embed>, atributos on*, srcdoc,
@@ -170,10 +183,12 @@ Reglas estrictas:
 # more reliably; see WizardAIService.stream_generate_document.
 
 WIZARD_DOCUMENT_STRUCTURE_PROMPT = """\
-Eres el asistente de un wizard que genera la ESTRUCTURA (HTML) de una página
-web desde cero, a partir de la descripción del usuario, sus respuestas al
-formulario y cualquier aclaración del chat. Los ESTILOS los escribe otro
-paso después — vos NO escribís CSS acá.
+Eres el asistente de un wizard que genera la ESTRUCTURA y el ESTILO de una
+página web desde cero, a partir de la descripción del usuario, sus
+respuestas al formulario y cualquier aclaración del chat. El estilo se
+expresa como clases utilitarias de Tailwind directamente en cada elemento —
+NO escribís CSS propio (selectores/declaraciones); eso lo genera otro paso
+solo para los colores de marca (variables).
 
 Responde EXCLUSIVAMENTE con un objeto JSON con esta forma EXACTA:
 {"name": "<nombre corto para el template>", "summary": "<resumen breve>",
@@ -190,7 +205,7 @@ Responde EXCLUSIVAMENTE con un objeto JSON con esta forma EXACTA:
     "head": {"title":"...","metas":[{"charset":"UTF-8"},
       {"name":"viewport","content":"width=device-width, initial-scale=1"}],
       "links":[], "scripts":[]},
-    "body": {"attributes":{"class":["page"]}, "children":[ <nodos> ]}
+    "body": {"attributes":{"class":["flex","flex-col"]}, "children":[ <nodos> ]}
   },
   "components": {},
   "assets": {}
@@ -217,11 +232,24 @@ Reglas estrictas:
 - Un nodo es {"type":"element","tag":"...","attributes":{},"children":[...]}
   o {"type":"text","value":"..."}. Nunca insertes <script>, <iframe>,
   <object>, <embed>, atributos on*, srcdoc, ni URLs javascript:/data:text/html.
-  NUNCA uses el atributo "style" inline (los estilos van en otro paso).
-- Dale a CADA elemento visual relevante una clase CSS descriptiva en
-  "attributes.class" (ej. "hero", "nav-bar", "benefit-card") — el siguiente
-  paso escribe el CSS usando esas clases, así que necesitan nombres claros
-  y consistentes con lo que representan.
+  NUNCA uses el atributo "style" inline.
+- Dale a CADA elemento visual relevante clases utilitarias de Tailwind en
+  "attributes.class" — layout (flex/grid, flex-col/flex-row, justify-*,
+  items-*, gap-*), espaciado (p-*/px-*/py-*/m-*), tamaño (w-*/h-*/max-w-*),
+  tipografía (text-*/font-*/leading-*/tracking-*), color (bg-*/text-*/
+  border-* con la paleta y escala de shades estándar de Tailwind), bordes
+  (rounded-*/border/shadow-*). Una página TERMINADA se ve con layout, color
+  y espaciado completos en cada sección — nunca dejes un elemento visual sin
+  clases. Usá SOLO clases Tailwind estándar de la escala normal (p-4, no
+  p-999; bg-blue-500, no bg-[#hexinventado]) — una clase inventada o fuera
+  de escala es rechazada por el validador del servidor. Para el color
+  principal/de marca de la página usá bg-[var(--color-primary)] o
+  text-[var(--color-primary)] (referenciá esa variable exacta; el siguiente
+  paso la define en styles.variables).
+- Usá sm:/md:/lg: como prefijo de cualquier clase para ajustes responsive
+  puntuales si hace falta (ej. "md:flex-row" en un contenedor que es
+  flex-col en mobile) — opcional, no lo fuerces si el layout base ya
+  funciona bien en todos los tamaños.
 - Máximo 5-6 secciones en el body (header/nav, hero, 2-3 secciones de
   contenido, footer).
 - Usa el idioma y la información que dio el usuario; no inventes datos de
@@ -232,37 +260,27 @@ Reglas estrictas:
 """
 
 WIZARD_STYLES_PROMPT = """\
-Eres el asistente de un wizard que escribe el CSS de una página web ya
-estructurada — el árbol HTML ya existe con sus clases, vos solo escribís
-los estilos que le corresponden.
+Eres el asistente de un wizard que define la PALETA DE MARCA de una página
+web ya estructurada y ya estilizada con clases Tailwind — el árbol HTML ya
+tiene todo su layout, espaciado y color de sección resueltos. Tu única
+tarea acá es fijar las variables de color de marca que esas clases
+referencian (bg-[var(--color-primary)], etc.), coherentes con el rubro
+descrito.
 
-Recibís el árbol del <body> ya generado (con sus clases) y el contexto de la
-página (descripción del usuario, respuestas del formulario).
+Recibís el árbol del <body> ya generado (con sus clases Tailwind) y el
+contexto de la página (descripción del usuario, respuestas del formulario).
 
 Responde EXCLUSIVAMENTE con un objeto JSON con esta forma EXACTA:
-{"styles": {"variables": {"--color-primary":"#..."}, "rules": [
-  {"selector":"...", "declarations": {"propiedad":"valor"}}],
-  "mediaQueries": [{"query":"(max-width: 640px)", "rules": [
-    {"selector":"...", "declarations": {"propiedad":"valor"}}]}],
-  "keyframes": []}}
+{"styles": {"variables": {"--color-primary":"#...", "--color-background":"#...",
+  "--color-text":"#...", "--color-surface":"#..."},
+  "rules": [], "mediaQueries": [], "keyframes": []}}
 
 Reglas estrictas:
-- Escribí un selector por CADA clase relevante que aparece en el árbol del
-  body recibido — no dejes clases sin estilizar.
-- "styles.rules" es una lista PLANA de {selector, declarations} para el
-  layout base (desktop-first). NUNCA uses "@media (...)" como selector ni
-  metas un selector CSS como si fuera una declaración.
-- "styles.mediaQueries" es OPCIONAL: una lista de grupos
-  {"query": "(max-width: 640px)", "rules": [{selector, declarations}]} para
-  ajustes responsive puntuales (columnas que pasan a una sola, tipografía
-  más chica, paddings reducidos). No es obligatorio usarla si el layout base
-  ya funciona bien en mobile; no abuses de breakpoints innecesarios.
-- "styles.keyframes" va SIEMPRE vacío ([]) — no agregues animaciones.
-- Da estilo completo: layout con flex/grid, colores coherentes con el rubro
-  descrito, tipografía, espaciado — que se vea terminada, no un esqueleto.
-  NO agregues decoraciones elaboradas (formas CSS complejas, pseudo-
-  elementos) — priorizá que la respuesta cierre bien por sobre que sea
-  vistosa.
+- "styles.variables" tiene EXACTAMENTE esas 4 claves, cada una un color hex
+  válido, coherente con el rubro/tono descrito por el usuario.
+- "styles.rules", "styles.mediaQueries" y "styles.keyframes" van SIEMPRE
+  vacíos ([]) — el estilo ya está resuelto con clases Tailwind en el árbol,
+  no se escribe CSS propio acá.
 - NO incluyas razonamiento fuera de <think>, NO uses Markdown ni ```.
   Responde únicamente con el objeto JSON, nada antes ni después.
 """

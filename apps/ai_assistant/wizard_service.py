@@ -171,12 +171,15 @@ class WizardAIService:
         """Yield ("reasoning", text) chunks from both phases, then a final
         ("done", WizardDocumentResult).
 
-        Two calls instead of one: structure (the HTML tree) first, then
-        styles for the classes that structure introduced — using the body
-        already generated as context so selectors actually match. Asking
-        for both in one shot was where the model most often ran out of
-        steam and silently dropped the trailing styles/components/assets
-        keys; each call alone is shorter and finishes more reliably.
+        Two calls, repurposed by the Tailwind migration (REFACTOR.md Phase
+        4): structure now includes Tailwind utility classes inline (no
+        separate element-styling phase needed), so the second call only
+        fixes the brand color palette (styles.variables) — a much smaller
+        prompt/response than the old per-class CSS-rules generation it
+        replaced. Kept as two calls rather than merged into one: this is
+        the conservative option where the reliability win wasn't verified
+        against extensive live-model runs; revisit merging them if the
+        structure call alone proves reliable enough in practice.
         Nothing is exposed until the terminal event: the assembled document
         is only returned after sanitize_document has accepted it whole.
         """
@@ -244,6 +247,18 @@ class WizardAIService:
             raw_reasoning = raw.get("reasoning") if isinstance(raw, dict) else None
             if raw_reasoning:
                 reasoning_parts.append(raw_reasoning)
+
+        # Styling now lives inline as Tailwind classes on each node (set
+        # during the structure phase above) — this second call only ever
+        # contributes brand-color variables. Force the rest empty rather
+        # than trust the model to keep echoing back empty boilerplate.
+        variables = (styles or {}).get("variables") if isinstance(styles, dict) else {}
+        styles = {
+            "variables": variables or {},
+            "rules": [],
+            "mediaQueries": [],
+            "keyframes": [],
+        }
 
         document = {**skeleton, "styles": styles}
         try:

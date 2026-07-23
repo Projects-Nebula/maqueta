@@ -23,7 +23,7 @@ VALID_SKELETON = {
     # must force them back in rather than fail the whole generation.
 }
 
-VALID_STYLES = {"variables": {}, "rules": [], "keyframes": []}
+VALID_STYLES = {"variables": {}, "rules": [], "mediaQueries": [], "keyframes": []}
 
 
 class _StubProvider:

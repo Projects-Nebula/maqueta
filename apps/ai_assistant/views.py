@@ -90,9 +90,9 @@ class EditorTransformView(APIView):
                 outcome = "ai_unavailable"
                 logger.exception("AI provider error for user %s", user_id)
                 yield sse_event("error", {"error": "ai_unavailable"})
-            except OperationValidationError:
+            except OperationValidationError as exc:
                 outcome = "invalid_operations"
-                logger.warning("AI produced invalid operations for user %s", user_id)
+                logger.warning("AI produced invalid operations for user %s: %s", user_id, exc)
                 yield sse_event("error", {"error": "invalid_operations"})
             except Exception:
                 # Anything else (parsing bugs, provider response shape drift, etc.)
