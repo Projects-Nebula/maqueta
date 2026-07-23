@@ -101,6 +101,7 @@ class Product(models.Model):
     description = models.TextField(blank=True)
     price_cents = models.PositiveIntegerField()  # never a float — Stripe wants integer minor units too
     image = models.ForeignKey(UploadedAsset, null=True, blank=True, on_delete=models.SET_NULL)
+    digital_file = models.FileField(upload_to="product-files/%Y/%m/", null=True, blank=True)
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -114,6 +115,32 @@ Owner-scoped CRUD via a new `ProductViewSet` (`apps/editor/views.py`,
 mirrors `UserTemplateViewSet`'s `get_queryset` owner-scoping exactly — same
 IDOR posture: `Product.objects.filter(owner=self.request.user)`), mounted
 in `apps/editor/api_urls.py` next to the existing router registration.
+
+**`digital_file` is optional.** A product with one set is a downloadable
+(a PDF, a zip, any file — see 1.6b for delivery); a product without one is
+a plain "buy this" with no fulfillment beyond the payment itself (e.g. a
+one-off tip/donation, or a physical/offline good the owner fulfills
+outside the app). Nothing in this feature requires every product to be
+digital.
+
+Validate the upload the same way `apps/editor/image_processing.py`
+validates image uploads (size cap first, before anything else touches the
+bytes) — but do **not** reuse `process_upload` itself (it re-encodes as an
+image, which would corrupt a PDF). New, parallel function
+`apps/storefront/file_validation.py`: a hard size cap (e.g. 50 MB — bigger
+than an image, since a real PDF/asset bundle can legitimately be large;
+tune if a concrete need says otherwise) checked **before** the file touches
+disk, plus a content-type allowlist by both declared MIME type and a
+real magic-byte sniff (never trust the client's `Content-Type` header or
+the filename extension alone — same "verify, don't trust the extension"
+posture `image_processing.py` already has for images). Start the allowlist
+narrow — `application/pdf`, `application/zip` — and extend only for a
+concrete need, exactly like `CSS_PROPERTY_ALLOWLIST`/`tailwind_classes.py`
+already do for CSS. Store outside any web-servable static path other than
+`MEDIA_ROOT` (already true — `digital_file` lives under `MEDIA_ROOT`, same
+as `UploadedAsset`), but see 1.6b: the file must **never** be served at a
+guessable/static `/media/...` URL — it needs access control a plain static
+file can't provide.
 
 ### 1.4 Products are referenced in the page tree the same way uploaded images already are
 
@@ -198,10 +225,63 @@ are a reachable follow-up, just not built now.
 **CSRF**: the checkout POST is exempt from CSRF (`@csrf_exempt` on this one
 view only) — an anonymous visitor has no session/CSRF cookie to present,
 and the transaction's integrity comes from server-side product lookup, not
-from a form token. This is the *only* CSRF-exempt view in the project;
-do not broaden the exemption pattern anywhere else.
+from a form token. This is the *only* other CSRF-exempt view besides the
+webhook (1.7) — do not broaden the exemption pattern anywhere else.
 
-### 1.7 `Order` model records completed payments, created only from a verified Stripe webhook
+### 1.6b Digital delivery: a downloadable product's file is served from a signed, single-purpose link — never a static `/media/...` URL
+
+A product with `digital_file` set (1.3) must be handed to the buyer **only
+after payment is confirmed**, and only to that buyer — not to anyone who
+guesses or reuses the URL. Concretely:
+
+1. The `Order` row (1.7) carries a `download_token` — generated with
+   `secrets.token_urlsafe(32)` when the row is created (in the webhook,
+   never earlier: no confirmed payment, no token). This is a capability
+   token, not a session — whoever has the URL can download, which is
+   the same trust model a Stripe receipt email already assumes.
+2. New view `GET /descargas/<token>/` (`apps/storefront/`) — public,
+   no login required (the buyer has no account). Look up
+   `Order.objects.get(download_token=token, status=Order.Status.PAID)` —
+   404 for a wrong/unpaid/nonexistent token (same "don't distinguish
+   the failure reason" posture as 1.1's public-page 404). If
+   `order.product.digital_file` is unset, 404 too (nothing to download).
+   Serve the file (`FileResponse`, `as_attachment=True`, the product's
+   real filename) — never a redirect to a raw `/media/...` path, so the
+   underlying storage path itself is never exposed to the browser.
+3. Cap abuse with `download_count` + `max_downloads` on `Order` (1.7) —
+   increment on every successful serve, 403 once the cap is hit. Default
+   cap generous (e.g. 5) since this is fraud/abuse mitigation, not DRM;
+   do not build anything more aggressive than a count cap for this pass.
+4. **The buyer reaches this link from the Stripe success page redirect**
+   (1.6's `success_url`) — Stripe's `{CHECKOUT_SESSION_ID}` template
+   variable is included in that URL
+   (`success_url=".../gracias/?session_id={CHECKOUT_SESSION_ID}"`). The
+   success-page view looks up the `Order` by `stripe_session_id` and shows
+   the `/descargas/<token>/` link if one exists and `status="paid"`.
+   **Race condition to handle explicitly**: the browser can land on the
+   success page *before* the webhook (1.7) has created/updated the
+   `Order` row — Stripe fires the webhook asynchronously, not
+   synchronously with the redirect. The success-page view must not assume
+   the `Order` already exists. Handle it by falling back to
+   `stripe.checkout.Session.retrieve(session_id)` (via the same
+   `PaymentProvider` abstraction, 1.9 step 5) when no `Order` is found yet,
+   checking `payment_status == "paid"` directly from Stripe as a
+   just-landed fallback, and showing a "procesando tu pago, actualizá la
+   página en unos segundos" message if even that isn't settled yet —
+   never fabricate a download link before genuine confirmation from
+   either the webhook or a direct Stripe lookup.
+5. No email delivery in this pass (sending the download link by email
+   requires configuring an `EMAIL_BACKEND`/SMTP provider, which doesn't
+   exist in this project yet) — the buyer gets the link only via the
+   success page. Flagged explicitly in Section 4 as deferred, not
+   forgotten.
+
+### 1.7 `Order` is the permanent record of every purchase — created only from a verified Stripe webhook
+
+This model is the direct answer to "we need a record in our database of
+which purchases were made" — every completed checkout produces exactly one
+row here, independent of anything else in this feature (the download
+mechanism in 1.6b is built on top of it, not a separate record).
 
 ```python
 class Order(models.Model):
@@ -216,8 +296,16 @@ class Order(models.Model):
     amount_cents = models.PositiveIntegerField()
     currency = models.CharField(max_length=8)
     status = models.CharField(max_length=16, choices=Status.choices, default=Status.PENDING)
+    download_token = models.CharField(max_length=64, unique=True, null=True, blank=True)
+    download_count = models.PositiveIntegerField(default=0)
+    max_downloads = models.PositiveIntegerField(default=5)
     created_at = models.DateTimeField(auto_now_add=True)
 ```
+
+`download_token`/`download_count`/`max_downloads` are only meaningful when
+`order.product.digital_file` is set (1.6b) — leave them at their defaults
+(`None`/`0`/`5`) for a non-digital product's orders; do not require a token
+on every row.
 
 New view `POST /webhooks/stripe/` (`@csrf_exempt`, the second and only
 other CSRF-exempt view): verifies the request signature with
@@ -226,9 +314,10 @@ settings.STRIPE_WEBHOOK_SECRET)` — **reject anything that fails
 verification** (400, log it, do not process). On a verified
 `checkout.session.completed` event, `get_or_create` an `Order` keyed by
 `stripe_session_id` (idempotent — Stripe retries webhook delivery, this
-must never double-record). The webhook is the *only* place `Order` rows get
-created — never create one directly from the checkout-redirect view, since
-that view runs before payment is confirmed.
+must never double-record), setting `download_token` at creation time if
+the product has a `digital_file`. The webhook is the *only* place `Order`
+rows get created — never create one directly from the checkout-redirect
+view, since that view runs before payment is confirmed.
 
 ### 1.8 New settings: `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `DEFAULT_CURRENCY`
 
@@ -266,8 +355,10 @@ for unauthenticated requests (confirmed this session:
 when `request.user` isn't authenticated), so no new throttle mechanism is
 needed, just new scopes in `config/settings/base.py`'s
 `DEFAULT_THROTTLE_RATES`: `"public_template_view": "60/m"`,
-`"checkout_session_create": "10/m"`. The Stripe webhook endpoint is
-**not** rate-limited by IP (Stripe's own IPs, signature-verified) — do not
+`"checkout_session_create": "10/m"`, `"digital_download": "20/m"` (the
+download view, 1.6b — bounds brute-forcing `download_token` values on top
+of the token's own entropy). The Stripe webhook endpoint is **not**
+rate-limited by IP (Stripe's own IPs, signature-verified) — do not
 throttle it, a dropped legitimate webhook silently loses an order.
 
 ---
@@ -284,14 +375,17 @@ public_slug: str | None = None  # unique, set on first publish
 `UserTemplate` — the same product could in principle be placed on more than
 one of the owner's pages):
 ```
-owner, name, description, price_cents, image (-> UploadedAsset), is_active,
-created_at, updated_at
+owner, name, description, price_cents, image (-> UploadedAsset),
+digital_file (optional — PDF/zip/etc., delivered post-purchase per 1.6b),
+is_active, created_at, updated_at
 ```
 
-**New `Order`**:
+**New `Order`** — the permanent purchase record (1.7):
 ```
 product (-> Product, nullable on delete), stripe_session_id (unique),
-buyer_email, amount_cents, currency, status, created_at
+buyer_email, amount_cents, currency, status,
+download_token (unique, set only when the product has a digital_file),
+download_count, max_downloads, created_at
 ```
 
 **Product card node** (inside `state.document.body`, same shape as any
@@ -369,20 +463,29 @@ can actually see/buy something," which unit tests alone cannot prove.
 1. `apps/storefront/` app (`models.py`, `serializers.py`, `views.py`,
    `urls.py`, `api_urls.py`, `admin.py`, migrations). Register in
    `INSTALLED_APPS`.
-2. `Product` model (1.3). `ProductViewSet` (owner-scoped, mirrors
-   `UserTemplateViewSet`). Mount at `/api/products/`
-   (`config/urls.py`).
-3. A minimal products management UI — reuse the existing wizard-image-
+2. `Product` model (1.3, includes `digital_file`). `ProductViewSet`
+   (owner-scoped, mirrors `UserTemplateViewSet`). Mount at
+   `/api/products/` (`config/urls.py`).
+3. `apps/storefront/file_validation.py` (1.3) — size cap + magic-byte
+   content-type sniff for `digital_file` uploads, checked in the
+   serializer/view before the file is saved.
+4. A minimal products management UI — reuse the existing wizard-image-
    upload endpoint (`/api/user-templates/wizard-images/`) for the
    product's `image` field (same `UploadedAsset` model, no new upload
-   code needed) plus a simple form (name, description, price) — a new
-   small page/panel is acceptable here (does not need to be inside the
-   main editor SPA-like flow); simplest: a `/productos/` page
-   (`@login_required`) listing/creating/editing the owner's products.
-4. Tests: owner-scoping (IDOR), price is always a positive int, image FK
-   nullable/optional.
-5. **Manual verification**: create a product with an image through the
-   UI, confirm it's owner-scoped (a second test user can't see/edit it).
+   code needed), a separate plain file-upload field for `digital_file`
+   (validated per step 3, not run through `image_processing.py`), plus a
+   simple form (name, description, price) — a new small page/panel is
+   acceptable here (does not need to be inside the main editor SPA-like
+   flow); simplest: a `/productos/` page (`@login_required`)
+   listing/creating/editing the owner's products.
+5. Tests: owner-scoping (IDOR), price is always a positive int, image FK
+   nullable/optional, `digital_file` accepts an allowlisted type/size and
+   rejects an oversized or disguised-extension upload (same spirit as
+   `tests/test_wizard_upload.py`'s coverage for images).
+6. **Manual verification**: create a product with an image AND a PDF
+   through the UI, confirm it's owner-scoped (a second test user can't
+   see/edit it, and cannot fetch the first user's `digital_file` through
+   the API).
 
 ### Phase 3 — Insert a product card into a page + the "Buy" form
 
@@ -421,24 +524,40 @@ can actually see/buy something," which unit tests alone cannot prove.
    inactive product. Redirects to the Stripe-hosted session URL.
 4. `POST /webhooks/stripe/` view (1.7) — `@csrf_exempt`, signature
    verification, idempotent `Order` creation on
-   `checkout.session.completed`.
-5. A thin Stripe client wrapper (e.g. `apps/storefront/payments.py`)
+   `checkout.session.completed`, sets `download_token` when the product
+   has a `digital_file` (1.6b).
+5. `GET /descargas/<token>/` view (1.6b) — serves `product.digital_file`
+   as an attachment after validating `Order.status == "paid"` and the
+   download cap; 404 otherwise.
+6. Success-page view (`success_url`'s target, e.g. `GET /gracias/`) —
+   looks up `Order` by the `session_id` query param; if not found yet,
+   falls back to a direct `PaymentProvider` lookup of the Stripe session
+   (the race condition in 1.6b); shows the `/descargas/<token>/` link
+   when a `digital_file` exists and the order is confirmed paid, otherwise
+   a plain thank-you message.
+7. A thin Stripe client wrapper (e.g. `apps/storefront/payments.py`)
    with a swappable interface — mirrors this project's existing
    `AIProvider`/`FakeAIProvider` pattern (`apps/ai_assistant/providers.
    py`) exactly: a `PaymentProvider` protocol with `create_checkout_
-   session(...)` and a `FakePaymentProvider` for tests that returns a
-   canned session object without calling the real Stripe API. Select via
+   session(...)` **and `retrieve_session(session_id)`** (needed for step
+   6's race-condition fallback) and a `FakePaymentProvider` for tests that
+   returns canned objects without calling the real Stripe API. Select via
    a setting (`PAYMENT_PROVIDER = env("PAYMENT_PROVIDER", default="fake"
    if not STRIPE_SECRET_KEY else "stripe")` — same "fake by default, real
    only with a key" posture `AI_PROVIDER` already has).
-6. Tests (all against `FakePaymentProvider`, never the real Stripe API —
+8. Tests (all against `FakePaymentProvider`, never the real Stripe API —
    same reasoning `FakeAIProvider` exists for): checkout view redirects
    with a valid product; 404s on inactive/missing product; webhook
    creates exactly one `Order` even if delivered twice (idempotency);
    webhook rejects a bad signature; price/currency in the created
    session always come from the DB row, never from request data (write
-   a test that POSTs a forged price and confirms it's ignored).
-7. **Manual verification (needs real Stripe test-mode keys — flag this
+   a test that POSTs a forged price and confirms it's ignored);
+   `/descargas/<token>/` 404s for an unpaid/wrong/exhausted-count token
+   and serves the file for a valid paid one, incrementing `download_count`;
+   the success-page view's race-condition fallback path (`Order` not yet
+   created, `PaymentProvider.retrieve_session` reports paid) is covered
+   explicitly, not just the already-webhook-processed happy path.
+9. **Manual verification (needs real Stripe test-mode keys — flag this
    requirement explicitly to the user if the environment doesn't have
    them, same as this project already flags "needs a real
    `OPENAI_API_KEY`" for `OpenAIProvider`)**: with `STRIPE_SECRET_KEY`/
@@ -448,7 +567,10 @@ can actually see/buy something," which unit tests alone cannot prove.
    a Stripe test card (`4242 4242 4242 4242`) → confirm redirect to the
    success URL → confirm the webhook fired (use `stripe listen --
    forward-to` locally, or check the Stripe dashboard's test-mode event
-   log) → confirm an `Order` row exists with `status="paid"`. If test-mode
+   log) → confirm an `Order` row exists with `status="paid"` → **for a
+   digital product, confirm the download link on the success page
+   actually downloads the real file, and that reusing the same link after
+   `max_downloads` is hit correctly 403s**. If test-mode
    keys are genuinely unavailable in this environment, say so explicitly
    in the final report rather than claiming this was verified — this
    mirrors the project's existing rule (`AGENTS.md`) that passing tests
@@ -504,6 +626,14 @@ up, do not silently expand scope mid-implementation:
   and should not be added speculatively.
 - **Sales analytics/dashboard.** `Order` rows exist and are queryable; no
   UI is built to summarize them.
+- **Emailing the download link / receipt.** No `EMAIL_BACKEND` exists in
+  this project yet — the buyer gets their digital file only via the
+  Stripe success-page redirect (1.6b step 5). Configuring outbound email
+  is a separate, infra-level piece of work.
+- **DRM / preventing redistribution of a downloaded file.** The download
+  cap (`max_downloads`, 1.6b) is abuse mitigation, not copy protection —
+  once downloaded, the file is a normal file. Do not build watermarking,
+  per-download unique file variants, or similar.
 
 ---
 
@@ -517,6 +647,10 @@ up, do not silently expand scope mid-implementation:
 | Forged webhook calls create fake "paid" orders | Signature verification (`stripe.Webhook.construct_event`) is mandatory before touching the DB; a failed verification is a 400, not a soft-fail. |
 | `stripe` Python package differs from what's drafted here by version | Pin a version in `pyproject.toml` after `uv add stripe` resolves one, and verify the exact `checkout.Session.create`/`Webhook.construct_event` call shapes against the installed version's own docs before trusting this document's exact kwarg names. |
 | Public page accidentally loads editor JS (XSS/editing surface exposed to anonymous users) | `public_page_html` (1.2) is a from-scratch renderer that only ever includes Tailwind's compiled CSS + rendered content — it must never reference `editor-core.js`/`editor-ai.js`/etc. Add a test asserting none of those script filenames appear in its output. |
+| Buyer lands on the success page before the webhook creates the `Order` (async delivery) | The success-page view falls back to a direct `PaymentProvider.retrieve_session` Stripe lookup instead of assuming the `Order` already exists (1.6b step 4); test this fallback path explicitly, not just the already-processed case. |
+| Digital file served from a guessable/static URL, bypassing payment | Never expose `digital_file` at a plain `/media/...` path in any template/response — the only path to it is `GET /descargas/<token>/`, gated on `Order.status == "paid"` (1.6b). Add a test that a product's raw storage path is never rendered anywhere public. |
+| Download link shared/reused beyond a reasonable number of times | `download_count`/`max_downloads` cap on `Order` (1.7); 403 once exhausted. This is abuse mitigation, not real DRM (Section 4) — don't over-invest here. |
+| A disguised file (e.g. an executable renamed `.pdf`) gets uploaded as a "digital product" | `file_validation.py` (1.3) sniffs real content/magic bytes, never trusts the filename extension or client-supplied `Content-Type` — same posture `image_processing.py` already has for images. |
 
 ---
 
@@ -527,7 +661,8 @@ New test files expected: `tests/test_public_template_view.py`,
 app-local convention is preferred — check whether `apps/ai_assistant`/
 `apps/editor` keep tests under the shared root `tests/` dir, which this
 session's work always did, and match it), `tests/test_checkout.py`,
-`tests/test_stripe_webhook.py`. All Stripe-touching tests use
+`tests/test_stripe_webhook.py`, `tests/test_digital_downloads.py`. All
+Stripe-touching tests use
 `FakePaymentProvider` (Phase 4 step 5) — never call the real Stripe API in
 `pytest`. Extend `tests/js/apply.test.js` only if a new operation-shape
 needs client-side coverage (unlikely — Section 1.5 deliberately avoids new
@@ -552,6 +687,17 @@ operation types).
 - [ ] A forged/tampered checkout POST (wrong price implied by a modified
       request) still charges the real DB price.
 - [ ] A replayed webhook event does not create a second `Order`.
+- [ ] Buy a digital (PDF) product end-to-end; the success page shows a
+      working download link and the downloaded file is the real one.
+- [ ] The same download link 403s once `max_downloads` is exceeded.
+- [ ] An unpaid/nonexistent/wrong download token 404s.
+- [ ] The success page still resolves correctly if visited before the
+      webhook has processed (race-condition fallback, 1.6b step 4) —
+      simulate by delaying the fake webhook delivery in a test/manual run.
+- [ ] `Order` rows are visible and queryable (e.g. via Django admin or a
+      shell query) as the actual record of every purchase — confirm this
+      is genuinely enough to answer "what did we sell and to whom" before
+      calling this done.
 
 ---
 
