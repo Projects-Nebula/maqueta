@@ -10,7 +10,8 @@ from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 
-from apps.storefront.models import Product
+from apps.storefront.models import PaymentGatewayConfig, Product
+from apps.storefront.views import _gateway_display_names
 
 from .operations import OperationValidationError
 from .providers import AIProviderError, AIProviderTimeout
@@ -64,6 +65,11 @@ class EditorTransformView(APIView):
             }
             for product in Product.objects.filter(owner=request.user, is_active=True)
         ]
+        gateway_labels = _gateway_display_names()
+        available_gateways = [
+            {"gateway": config.gateway, "label": gateway_labels.get(config.gateway, config.gateway)}
+            for config in PaymentGatewayConfig.objects.filter(owner=request.user, is_enabled=True)
+        ]
 
         context = EditorContext(
             instruction=data["instruction"],
@@ -77,6 +83,7 @@ class EditorTransformView(APIView):
             global_mode=data.get("global_mode", False),
             history=data.get("history", []),
             available_products=available_products,
+            available_gateways=available_gateways,
         )
         user_id = request.user.pk
         scope = self.throttle_scope
