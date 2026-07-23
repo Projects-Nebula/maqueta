@@ -8,6 +8,11 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **Free delivery ($0 tracked `Order`) when a seller has no gateway
+  enabled.** Rather than 404 or silently give the product away untracked,
+  `CheckoutView` now delivers directly and records a real, permanent
+  `Order` (`gateway="none"`, `amount_cents=0`, `status=PAID`) — auditable
+  exactly like any real purchase.
 - **Multi-gateway checkout: Stripe, Mercado Pago, PayPal, Braintree, Wompi,
   PayU, ePayco, Bold.** The buyer picks the gateway at checkout — every
   product card gets one "Pagar con X" button per gateway the seller has

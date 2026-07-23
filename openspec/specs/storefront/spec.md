@@ -82,6 +82,28 @@ view is `AllowAny` and was never meant to authenticate the requester at all.
   checkout URL with no `X-CSRFToken` header
 - THEN the request succeeds (302 redirect), not a CSRF 403
 
+## Requirement: Legacy checkout URL and gateway-less delivery
+`POST /comprar/<product_id>/` (no gateway segment — the shape baked into
+any `UserTemplate` state saved before multi-gateway checkout shipped) SHALL
+NOT 404 a buy button that already worked before. It falls back to the
+seller's first enabled gateway (deterministic alphabetical order). If the
+seller has NO gateway enabled at all, the product is delivered directly and
+a real, permanent `Order` is still recorded (`gateway="none"`,
+`amount_cents=0`, `status=PAID`) — a $0 delivery is auditable exactly like
+a real purchase, never silently untracked.
+
+#### Scenario: Legacy URL uses the seller's first enabled gateway
+- WHEN a buyer POSTs `/comprar/<id>/` (no gateway) and the seller has one or
+  more gateways enabled
+- THEN checkout proceeds via the alphabetically-first enabled gateway
+
+#### Scenario: No gateway enabled at all delivers for free, still tracked
+- WHEN a buyer POSTs a checkout URL (legacy or otherwise resolving to no
+  enabled gateway) and the seller has zero enabled `PaymentGatewayConfig`
+  rows
+- THEN the buyer reaches the success page immediately and an `Order` with
+  `gateway="none"`/`amount_cents=0`/`status=PAID` exists for that product
+
 ## Requirement: An Order is the permanent, gateway-independent purchase record
 `Order` (product, `gateway`, `gateway_session_id` — unique per gateway, not
 globally, since two different gateways could theoretically collide on
