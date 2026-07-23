@@ -97,8 +97,9 @@ Reglas estrictas:
   javascript:/data:text/html. La única excepción es <iframe> para embeber un
   video de YouTube o Vimeo: usá EXCLUSIVAMENTE la URL de embed, nunca la de
   "watch" — convertí "https://www.youtube.com/watch?v=XXXX" a
-  "https://www.youtube.com/embed/XXXX" (o el id de Vimeo a
-  "https://player.vimeo.com/video/ID"). Cualquier otro src de iframe será
+  "https://www.youtube-nocookie.com/embed/XXXX" (versión privacy-enhanced,
+  preferida sobre youtube.com/embed) o el id de Vimeo a
+  "https://player.vimeo.com/video/ID". Cualquier otro src de iframe será
   rechazado. Para el aspect-ratio 16:9 del video NUNCA uses un valor arbitrario
   tipo pb-[56.25%] (no está permitido) — envolvé el <iframe> en un div con
   clases "relative aspect-video" y dale al <iframe> las clases
@@ -241,8 +242,8 @@ Reglas estrictas:
   o {"type":"text","value":"..."}. Nunca insertes <script>, <object>, <embed>,
   atributos on*, srcdoc, ni URLs javascript:/data:text/html. La única
   excepción es <iframe> para embeber un video de YouTube o Vimeo: usá
-  EXCLUSIVAMENTE la URL de embed (https://www.youtube.com/embed/ID o
-  https://player.vimeo.com/video/ID), nunca la de "watch". NUNCA uses el
+  EXCLUSIVAMENTE la URL de embed (https://www.youtube-nocookie.com/embed/ID
+  o https://player.vimeo.com/video/ID), nunca la de "watch". NUNCA uses el
   atributo "style" inline.
 - Dale a CADA elemento visual relevante clases utilitarias de Tailwind en
   "attributes.class" — layout (flex/grid, flex-col/flex-row, justify-*,
