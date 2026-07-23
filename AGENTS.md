@@ -54,20 +54,39 @@ docker run --rm --network host -v "$PWD":/work -w /work \
 Keep the image tag matched to the installed `@playwright/test` version
 (`npx playwright --version`) — a mismatch fails the browser launch.
 
-## Learnings
+## Using learnings.jsonl
 
-Before working on a problem, check `LEARNINGS.md` for a similar past issue.
+Before solving a problem:
 
-After solving one, record ONLY learnings that are:
+1. Search `learnings.jsonl` for matches by error message, tags, project, and
+   related files.
+2. Prioritize learnings with `status: "verified"`.
+3. Do not assume an unverified learning is correct.
 
-- **reproducible** — a specific trigger and outcome, not a one-off fluke.
-- **verified** — you actually confirmed the fix/cause, not a guess.
-- **useful for future cases** — generalizes beyond the one file/line it
-  happened in.
+After solving a problem:
 
-Never record secrets, tokens, passwords, or other private/sensitive
-information — a learning is a technical fact about the codebase or its
-tools, not a log of what credentials were involved.
+1. Record only proven solutions.
+2. Append a new JSON object on a single line.
+3. Never store passwords, tokens, API keys, or private data.
+4. If a solution replaces a previous one, use the `supersedes` field.
+
+**Schema** (one JSON object per line, no wrapping array):
+
+```json
+{
+  "id": "2026-07-22-01",
+  "timestamp": "2026-07-22T14:30:00Z",
+  "status": "verified",
+  "title": "short title",
+  "error_message": "the exact error string, if any, that led here",
+  "cause": "verified root cause",
+  "fix": "what actually resolved it",
+  "tags": ["django", "pytest", "..."],
+  "project": "maqueta",
+  "files": ["apps/editor/views.py"],
+  "supersedes": null
+}
+```
 
 ## Conventions
 
@@ -117,8 +136,8 @@ stream, not a single JSON blob, when parsing it.
 - `CHANGELOG.md` — what shipped.
 - `BACKLOG.csv` — known limitations and pending work, structured for
   filtering (status/area/category/verification/blocked_by).
-- `LEARNINGS.md` — reproducible, verified technical learnings from past
-  debugging — check before starting, add after solving (see "Learnings"
-  above).
+- `learnings.jsonl` — verified technical learnings from past debugging, one
+  JSON object per line — check before starting, append after solving (see
+  "Using learnings.jsonl" above).
 - `openspec/specs/` / `openspec/changes/` — capability specs and in-flight
   change proposals.
