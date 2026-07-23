@@ -2,7 +2,8 @@ from rest_framework import serializers
 
 from .file_validation import FileValidationError
 from .file_validation import validate_digital_file as check_digital_file
-from .models import Product
+from .models import PaymentGatewayConfig, Product
+from .payments import GATEWAY_REGISTRY
 
 
 class ProductSerializer(serializers.ModelSerializer):
@@ -61,3 +62,63 @@ class ProductSerializer(serializers.ModelSerializer):
         except FileValidationError as exc:
             raise serializers.ValidationError(str(exc)) from exc
         return value
+
+
+class PaymentGatewayConfigSerializer(serializers.ModelSerializer):
+    """`credentials` is write-only: a PATCH/POST merges the given fields
+    into whatever's already encrypted-and-stored, and a GET/list response
+    never includes it, even to the owner who set it — `has_credentials`
+    (a per-field presence map, not the values themselves) is the read-side
+    signal the UI uses to show "ya configurado" vs empty."""
+
+    credentials = serializers.DictField(write_only=True, required=False)
+    has_credentials = serializers.SerializerMethodField()
+    required_fields = serializers.SerializerMethodField()
+
+    class Meta:
+        model = PaymentGatewayConfig
+        fields = [
+            "id",
+            "gateway",
+            "is_enabled",
+            "credentials",
+            "has_credentials",
+            "required_fields",
+            "updated_at",
+        ]
+        read_only_fields = ["id", "has_credentials", "required_fields", "updated_at"]
+
+    def get_has_credentials(self, obj):
+        required_fields, _factory, _fake = GATEWAY_REGISTRY.get(obj.gateway, ([], None, None))
+        stored = obj.get_credentials()
+        return {field: bool(stored.get(field)) for field in required_fields}
+
+    def get_required_fields(self, obj):
+        required_fields, _factory, _fake = GATEWAY_REGISTRY.get(obj.gateway, ([], None, None))
+        return required_fields
+
+    def validate_gateway(self, value):
+        if value not in GATEWAY_REGISTRY:
+            raise serializers.ValidationError(f"unknown gateway: {value}")
+        return value
+
+    def create(self, validated_data):
+        credentials = validated_data.pop("credentials", {})
+        instance = super().create(validated_data)
+        if credentials:
+            instance.set_credentials(credentials)
+            instance.save(update_fields=["credentials_encrypted"])
+        return instance
+
+    def update(self, instance, validated_data):
+        credentials = validated_data.pop("credentials", None)
+        instance = super().update(instance, validated_data)
+        if credentials is not None:
+            # Merge, don't replace — a PATCH sending only a changed field
+            # (e.g. just toggling is_enabled) must never wipe out
+            # previously-saved credentials for the other fields.
+            merged = instance.get_credentials()
+            merged.update(credentials)
+            instance.set_credentials(merged)
+            instance.save(update_fields=["credentials_encrypted"])
+        return instance

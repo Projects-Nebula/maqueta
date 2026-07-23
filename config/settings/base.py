@@ -27,8 +27,6 @@ env = environ.Env(
     # large-JSON task. See WizardAIService.
     OPENCODE_ZEN_CHAT_MODEL=(str, "mimo-v2.5"),
     OPENCODE_ZEN_BASE_URL=(str, "https://opencode.ai/zen/go/v1"),
-    STRIPE_SECRET_KEY=(str, ""),
-    STRIPE_WEBHOOK_SECRET=(str, ""),
     DEFAULT_CURRENCY=(str, "usd"),
 )
 
@@ -165,12 +163,13 @@ OPENCODE_ZEN_BASE_URL = env("OPENCODE_ZEN_BASE_URL")
 AI_PROVIDER = env("AI_PROVIDER", default="openai" if OPENAI_API_KEY else "fake")
 
 # --- Storefront / payments --------------------------------------------------
-STRIPE_SECRET_KEY = env("STRIPE_SECRET_KEY")
-STRIPE_WEBHOOK_SECRET = env("STRIPE_WEBHOOK_SECRET")
+# Per-gateway credentials are owner-configured via /config (PaymentGatewayConfig,
+# encrypted at rest — see apps/storefront/crypto.py) rather than env vars: this
+# is a multi-tenant editor where each seller has their own Stripe/Mercado
+# Pago/etc account, not one global gateway for the whole deployment. Only
+# DEFAULT_CURRENCY stays a deployment-wide setting (not a secret, not
+# per-gateway).
 DEFAULT_CURRENCY = env("DEFAULT_CURRENCY")
-# Same "fake by default, real only with a key" posture as AI_PROVIDER —
-# tests and local dev never touch the real Stripe API.
-PAYMENT_PROVIDER = env("PAYMENT_PROVIDER", default="fake" if not STRIPE_SECRET_KEY else "stripe")
 
 # --- Security headers ------------------------------------------------------
 DATA_UPLOAD_MAX_MEMORY_SIZE = 1024 * 1024  # 1 MB request body cap

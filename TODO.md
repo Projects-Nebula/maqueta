@@ -1,0 +1,6 @@
+- [x] quitar el deepseek-v4-pro/flash unavailable via opencode_zen del BACKLOG.csv
+- [] Implementar PAYMENTS.md
+- [] Actualizar los archivos .md, .csv y .jsonl
+- [] Dejar instrucciones para que cualquier agente que lea el proyecto sepa como manegar y administrar el openspec de forma profesional
+- [] Hacer una ruta /config para que los usuarios puedan configurar las diferentes pasarelas de pago poner sus credenciales y activar o desactivar cada una
+- [] Como un experto en UI/UX que eres analiza todo el proyecto crea un UXUI.md y da instrucciones para que un agente de forma continua deje la interfaz con el aspecto mas profesional posible

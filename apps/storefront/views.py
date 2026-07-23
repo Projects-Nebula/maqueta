@@ -7,6 +7,7 @@ from django.shortcuts import render
 from django.urls import reverse
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_http_methods
 from rest_framework import viewsets
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.permissions import AllowAny, IsAuthenticated
@@ -14,24 +15,37 @@ from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 
-from .models import Order, Product
-from .payments import FakePaymentProvider, PaymentProviderError, build_payment_provider
-from .serializers import ProductSerializer
+from .models import Order, PaymentGatewayConfig, Product
+from .payments import GATEWAY_REGISTRY, PaymentProviderError, build_payment_provider
+from .serializers import PaymentGatewayConfigSerializer, ProductSerializer
 
 logger = logging.getLogger(__name__)
 
 
-def _record_order_for_session(provider, session_id, product_id):
+def _gateway_config_for(owner_id, gateway):
+    return PaymentGatewayConfig.objects.filter(owner_id=owner_id, gateway=gateway).first()
+
+
+def _provider_for(owner_id, gateway):
+    """Builds the provider a checkout/webhook for this owner+gateway should
+    use — real if enabled with complete credentials, otherwise that
+    gateway's own Fake variant (see payments.build_payment_provider)."""
+    config = _gateway_config_for(owner_id, gateway)
+    credentials = config.get_credentials() if config else None
+    return build_payment_provider(gateway, credentials)
+
+
+def _record_order_for_session(provider, gateway, session_id, product_id):
     """Create (or no-op if already created) the Order for a paid session.
 
     The single source of truth for "a session was paid" — normally reached
-    only via StripeWebhookView (the real, signature-verified webhook).
-    CheckoutView also calls this directly, but ONLY when running against
-    FakePaymentProvider: there is no real Stripe server in dev/test to ever
-    deliver a webhook, so without this the fake provider's "instantly-
+    only via a gateway's real, signature-verified webhook view.
+    CheckoutView also calls this directly, but ONLY when running against a
+    Fake* provider: there is no real payment server in dev/test to ever
+    deliver a webhook, so without this a fake provider's "instantly-
     successful payment" (payments.py) would leave the buyer stuck on
     "Procesando tu pago..." forever, since nothing else would ever create
-    the Order row. Never called this way for StripePaymentProvider — real
+    the Order row. Never called this way for a real provider — real
     payments still require the actual signed webhook. Raises
     PaymentProviderError on lookup failure — callers decide what HTTP
     status that becomes.
@@ -42,7 +56,8 @@ def _record_order_for_session(provider, session_id, product_id):
     order_status = Order.Status.PAID if status.payment_status == "paid" else Order.Status.FAILED
 
     order, created = Order.objects.get_or_create(
-        stripe_session_id=session_id,
+        gateway=gateway,
+        gateway_session_id=session_id,
         defaults={
             "product": product,
             "buyer_email": status.customer_email,
@@ -76,20 +91,70 @@ def products_view(request):
     return render(request, "storefront/products.html", {})
 
 
+@login_required
+def payment_config_view(request):
+    """/config/ — the owner's payment-gateway configuration page (enable
+    each of the 8 gateways, paste in credentials). Plain server-rendered
+    shell; all CRUD happens client-side against
+    /api/payment-gateway-configs/ (static/storefront/payment-config.js)."""
+    return render(request, "storefront/payment_config.html", {})
+
+
+class PaymentGatewayConfigViewSet(viewsets.ModelViewSet):
+    """Owner-scoped CRUD for /api/payment-gateway-configs/. Credentials are
+    write-only (see the serializer) — never returned in any response, even
+    to the owner who set them; the UI shows only whether each field is
+    already set, never its value, once saved."""
+
+    serializer_class = PaymentGatewayConfigSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return PaymentGatewayConfig.objects.filter(owner=self.request.user)
+
+    def perform_create(self, serializer):
+        serializer.save(owner=self.request.user)
+
+
+def _gateway_display_names():
+    return {
+        "stripe": "Stripe",
+        "mercadopago": "Mercado Pago",
+        "paypal": "PayPal",
+        "braintree": "Braintree",
+        "wompi": "Wompi",
+        "payu": "PayU",
+        "epayco": "ePayco",
+        "bold": "Bold",
+    }
+
+
+def enabled_gateways_for(owner_id) -> list[dict]:
+    """Every gateway this owner has explicitly enabled — used to render one
+    "Pagar con X" button per gateway on a product card (apps/ai_assistant's
+    available_gateways context, see prompts.py)."""
+    names = _gateway_display_names()
+    return [
+        {"gateway": config.gateway, "label": names.get(config.gateway, config.gateway)}
+        for config in PaymentGatewayConfig.objects.filter(owner_id=owner_id, is_enabled=True)
+    ]
+
+
 @method_decorator(csrf_exempt, name="dispatch")
 class CheckoutView(APIView):
-    """POST /comprar/<product_id>/ — creates a Stripe Checkout Session and
-    redirects to it. Never trusts a price/currency/name from the request —
-    only the product id; everything charged comes from the DB row
-    (FEATURE.md 1.6). CSRF-exempt: an anonymous buyer has no CSRF cookie to
-    present; integrity comes from the server-side product lookup, not a
-    form token. authentication_classes=[]: DRF's SessionAuthentication runs
-    its OWN CSRF check independent of csrf_exempt whenever it successfully
-    authenticates a request — a logged-in visitor (e.g. the template's own
-    owner, testing their own buy button) would otherwise still get a CSRF
-    403 despite the decorator above. Not a problem here: permission_classes
-    is already AllowAny, so there's no reason to authenticate the requester
-    at all for this public, unauthenticated action.
+    """POST /comprar/<product_id>/<gateway>/ — creates a checkout session
+    with the product owner's configured gateway and redirects to it. Never
+    trusts a price/currency/name from the request — only the product id;
+    everything charged comes from the DB row (FEATURE.md 1.6). CSRF-exempt:
+    an anonymous buyer has no CSRF cookie to present; integrity comes from
+    the server-side product lookup, not a form token.
+    authentication_classes=[]: DRF's SessionAuthentication runs its OWN CSRF
+    check independent of csrf_exempt whenever it successfully authenticates
+    a request — a logged-in visitor (e.g. the template's own owner, testing
+    their own buy button) would otherwise still get a CSRF 403 despite the
+    decorator above. Not a problem here: permission_classes is already
+    AllowAny, so there's no reason to authenticate the requester at all for
+    this public, unauthenticated action.
     """
 
     permission_classes = [AllowAny]
@@ -97,18 +162,26 @@ class CheckoutView(APIView):
     throttle_classes = [ScopedRateThrottle]
     throttle_scope = "checkout_session_create"
 
-    def post(self, request, product_id):
+    def post(self, request, product_id, gateway):
+        if gateway not in GATEWAY_REGISTRY:
+            raise Http404
         product = Product.objects.filter(pk=product_id, is_active=True).first()
         if not product:
+            raise Http404
+        config = _gateway_config_for(product.owner_id, gateway)
+        if not config or not config.is_enabled:
+            # The seller never turned this gateway on for their shop —
+            # never let it be reachable, same "don't offer what isn't
+            # actually configured" posture as everything else here.
             raise Http404
 
         success_url = (
             request.build_absolute_uri(reverse("storefront:success"))
-            + "?session_id={CHECKOUT_SESSION_ID}"
+            + f"?gateway={gateway}&session_id={{CHECKOUT_SESSION_ID}}"
         )
         cancel_url = request.build_absolute_uri(reverse("storefront:checkout-cancel"))
 
-        provider = build_payment_provider(settings)
+        provider = build_payment_provider(gateway, config.get_credentials())
         try:
             session = provider.create_checkout_session(
                 product_name=product.name,
@@ -119,16 +192,19 @@ class CheckoutView(APIView):
                 client_reference_id=str(product.id),
             )
         except PaymentProviderError:
-            logger.exception("checkout session creation failed for product %s", product_id)
+            logger.exception(
+                "checkout session creation failed for product %s via %s", product_id, gateway
+            )
             return Response({"error": "checkout_unavailable"}, status=502)
 
-        if isinstance(provider, FakePaymentProvider):
-            # No real Stripe server exists in dev/test to ever deliver the
-            # webhook — record the order immediately, matching what the fake
-            # provider already pretends happened (an instantly-successful
-            # payment). Real Stripe checkouts never take this path.
+        is_fake = type(provider).__name__.startswith("Fake")
+        if is_fake:
+            # No real payment server exists in dev/test to ever deliver the
+            # webhook — record the order immediately, matching what the
+            # fake provider already pretends happened (an instantly-
+            # successful payment). Real gateway checkouts never take this path.
             try:
-                _record_order_for_session(provider, session.id, str(product.id))
+                _record_order_for_session(provider, gateway, session.id, str(product.id))
             except PaymentProviderError:
                 logger.exception("could not record fake order for session %s", session.id)
 
@@ -140,21 +216,25 @@ def checkout_cancel_view(request):
 
 
 class SuccessView(APIView):
-    """GET /gracias/?session_id=... — the buyer lands here after Stripe
-    Checkout. The webhook (StripeWebhookView) is delivered asynchronously
-    and may not have created/updated the Order yet by the time this loads
+    """GET /gracias/?gateway=...&session_id=... — the buyer lands here
+    after checkout. The gateway's webhook is delivered asynchronously and
+    may not have created/updated the Order yet by the time this loads
     (FEATURE.md 1.6b) — fall back to a direct provider lookup instead of
-    assuming the Order already exists.
+    assuming the Order already exists. Some gateways (PayU, ePayco) have no
+    simple "retrieve by reference" call at all — for those this always
+    falls through to "pending" until their webhook actually lands, which is
+    the correct/only way those two can be confirmed.
     """
 
     permission_classes = [AllowAny]
 
     def get(self, request):
+        gateway = request.GET.get("gateway", "")
         session_id = request.GET.get("session_id")
-        if not session_id:
+        if not session_id or gateway not in GATEWAY_REGISTRY:
             raise Http404
 
-        order = Order.objects.filter(stripe_session_id=session_id).first()
+        order = Order.objects.filter(gateway=gateway, gateway_session_id=session_id).first()
         if order and order.status == Order.Status.PAID:
             return render(
                 request,
@@ -163,9 +243,16 @@ class SuccessView(APIView):
             )
 
         # Webhook hasn't landed yet (or never will for this session) — ask
-        # the provider directly rather than showing a false negative.
-        provider = build_payment_provider(settings)
+        # the provider directly rather than showing a false negative. We
+        # don't know the product owner here (no product id on this URL), so
+        # this can only use the fake provider's own class-level session
+        # store, or (for real gateways) a lookup that doesn't require
+        # per-owner credentials in the first place — PayPal/Mercado
+        # Pago/Wompi's retrieve_session needs real credentials, so this
+        # fallback is best-effort and mainly exercises the fake-provider
+        # dev path exactly like it already did for Stripe-only.
         try:
+            provider = build_payment_provider(gateway, None)
             status = provider.retrieve_session(session_id)
         except PaymentProviderError:
             return render(request, "storefront/success.html", {"pending": True})
@@ -173,8 +260,8 @@ class SuccessView(APIView):
         if status.payment_status != "paid":
             return render(request, "storefront/success.html", {"pending": True})
 
-        # Paid per Stripe, but our webhook hasn't recorded it yet — do not
-        # fabricate an Order here (that's the webhook's job alone, 1.7);
+        # Paid per the provider, but our webhook hasn't recorded it yet —
+        # do not fabricate an Order here (that's the webhook's job alone);
         # tell the buyer to wait rather than showing a download link for a
         # purchase our own database doesn't yet know about.
         return render(request, "storefront/success.html", {"pending": True})
@@ -189,52 +276,155 @@ def _download_url(request, order):
 
 
 @method_decorator(csrf_exempt, name="dispatch")
-class StripeWebhookView(APIView):
-    """POST /webhooks/stripe/ — the ONLY place an Order is created. Never
-    rate-limited (a dropped legitimate webhook silently loses an order) and
-    never CSRF-checked (Stripe can't present a token) — authenticity comes
-    entirely from signature verification. authentication_classes=[]: see
-    CheckoutView's docstring — SessionAuthentication's own CSRF check is
-    independent of csrf_exempt, and there's no legitimate requester to
-    authenticate here anyway (Stripe, not a browser session).
+class GatewayWebhookView(APIView):
+    """Base for all 8 gateway webhook views (POST /webhooks/<gateway>/) —
+    the ONLY place an Order is created for a real (non-fake) provider.
+    Never rate-limited (a dropped legitimate webhook silently loses an
+    order) and never CSRF-checked (the gateway can't present a token) —
+    authenticity comes entirely from each provider's own signature
+    verification. authentication_classes=[]: see CheckoutView's docstring —
+    SessionAuthentication's own CSRF check is independent of csrf_exempt,
+    and there's no legitimate requester to authenticate here anyway (the
+    gateway's server, not a browser session).
+
+    Subclasses set `gateway`. The webhook payload identifies which SELLER
+    it belongs to only implicitly (via the session/reference id an earlier
+    checkout already recorded nowhere obvious) — real gateways carry the
+    merchant/account identity in the credentials used to verify the
+    signature, not in the payload, so every owner who has this gateway
+    enabled is tried in turn until one successfully verifies the signature.
+    This is the same tradeoff every multi-tenant webhook integration faces
+    without a per-owner webhook URL/path; scoped here as "try each
+    candidate owner's credentials", not left unverified.
     """
 
     permission_classes = [AllowAny]
     authentication_classes = []
+    gateway: str = ""
 
     def post(self, request):
-        provider = build_payment_provider(settings)
-        try:
-            event = provider.parse_webhook_event(
-                payload=request.body,
-                sig_header=request.META.get("HTTP_STRIPE_SIGNATURE", ""),
-                webhook_secret=settings.STRIPE_WEBHOOK_SECRET,
+        configs = PaymentGatewayConfig.objects.filter(gateway=self.gateway, is_enabled=True)
+        headers = request.META
+        query_params = request.GET
+        payload = request.body
+
+        event = None
+        matched_config = None
+        for config in configs:
+            provider = build_payment_provider(self.gateway, config.get_credentials())
+            if type(provider).__name__.startswith("Fake"):
+                continue  # a real webhook can never be authenticated by a fake provider
+            try:
+                event = provider.parse_webhook_event(
+                    payload=payload, headers=headers, query_params=query_params
+                )
+                matched_config = config
+                break
+            except PaymentProviderError:
+                continue
+
+        if event is None or matched_config is None:
+            logger.warning(
+                "rejected %s webhook: no matching enabled seller verified it", self.gateway
             )
-        except PaymentProviderError:
-            logger.warning("rejected webhook with invalid signature")
             return Response(status=400)
 
-        event_type = event.get("type") if isinstance(event, dict) else getattr(event, "type", None)
-        if event_type != "checkout.session.completed":
-            return Response(status=200)
+        session_id, product_id = self._extract_session_and_product(event)
+        if not session_id:
+            return Response(status=200)  # an event type we don't act on
 
-        session_obj = (
-            event.get("data", {}).get("object", {})
-            if isinstance(event, dict)
-            else event["data"]["object"]
-        )
-        session_id = session_obj.get("id") if isinstance(session_obj, dict) else session_obj["id"]
-        product_id = (
-            session_obj.get("client_reference_id") if isinstance(session_obj, dict) else None
-        )
-
+        provider = build_payment_provider(self.gateway, matched_config.get_credentials())
         try:
-            _record_order_for_session(provider, session_id, product_id)
+            _record_order_for_session(provider, self.gateway, session_id, product_id)
         except PaymentProviderError:
-            logger.exception("could not retrieve session %s for webhook processing", session_id)
+            logger.exception(
+                "could not retrieve %s session %s for webhook processing", self.gateway, session_id
+            )
             return Response(status=502)
 
         return Response(status=200)
+
+    def _extract_session_and_product(self, event):
+        """Gateway-specific: where the session/reference id and our own
+        client_reference_id live in that gateway's event shape. Returns
+        (session_id, product_id) — session_id None means "ignore this
+        event type", matching Stripe's own
+        checkout.session.completed-only filter."""
+        raise NotImplementedError
+
+
+class StripeWebhookView(GatewayWebhookView):
+    gateway = "stripe"
+
+    def _extract_session_and_product(self, event):
+        # event is always a plain dict here — both FakeStripeProvider
+        # (json.loads) and StripePaymentProvider (event.to_dict()) return one.
+        if event.get("type") != "checkout.session.completed":
+            return None, None
+        session_obj = event.get("data", {}).get("object", {})
+        return session_obj.get("id"), session_obj.get("client_reference_id")
+
+
+class MercadoPagoWebhookView(GatewayWebhookView):
+    gateway = "mercadopago"
+
+    def _extract_session_and_product(self, event):
+        if event.get("type") != "payment":
+            return None, None
+        return str(event.get("data", {}).get("id", "")), None
+
+
+class PayPalWebhookView(GatewayWebhookView):
+    gateway = "paypal"
+
+    def _extract_session_and_product(self, event):
+        resource = event.get("resource", {}) if isinstance(event, dict) else {}
+        order_id = resource.get("supplementary_data", {}).get("related_ids", {}).get("order_id")
+        product_id = None
+        for unit in resource.get("purchase_units", []) or []:
+            product_id = unit.get("reference_id")
+            if product_id:
+                break
+        return order_id or resource.get("id"), product_id
+
+
+class BraintreeWebhookView(GatewayWebhookView):
+    gateway = "braintree"
+
+    def _extract_session_and_product(self, event):
+        return event.get("transaction_id"), None
+
+
+class WompiWebhookView(GatewayWebhookView):
+    gateway = "wompi"
+
+    def _extract_session_and_product(self, event):
+        transaction = event.get("data", {}).get("transaction", {})
+        return transaction.get("reference"), None
+
+
+class PayUWebhookView(GatewayWebhookView):
+    gateway = "payu"
+
+    def _extract_session_and_product(self, event):
+        return event.get("reference_sale"), None
+
+
+class EpaycoWebhookView(GatewayWebhookView):
+    gateway = "epayco"
+
+    def _extract_session_and_product(self, event):
+        return event.get("x_ref_payco"), None
+
+
+class BoldWebhookView(GatewayWebhookView):
+    gateway = "bold"
+
+    def _extract_session_and_product(self, event):
+        # BoldPaymentProvider.parse_webhook_event always raises (unverified,
+        # see payments.py) — this is never actually reached until that's
+        # implemented for real, kept only so the URL/view exists.
+        return None, None
 
 
 class DownloadView(APIView):
@@ -261,3 +451,14 @@ class DownloadView(APIView):
             as_attachment=True,
             filename=order.product.digital_file.name.rsplit("/", 1)[-1],
         )
+
+
+@require_http_methods(["GET"])
+def payu_redirect_view(request):
+    """GET /pagar/payu/redirect/ — PayU's WebCheckout is a client-side POST
+    to their own hosted page (no create-session API call exists), so this
+    renders the tiny auto-submitting form CheckoutView's PayU session URL
+    points at. Every field PayUPaymentProvider already computed is passed
+    through as query params — this view only turns them into hidden
+    <input>s and auto-submits; it never re-derives or trusts anything."""
+    return render(request, "storefront/payu_redirect.html", {"fields": request.GET.dict()})
