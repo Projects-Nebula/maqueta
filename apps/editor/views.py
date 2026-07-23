@@ -3,13 +3,15 @@ import uuid
 from django.contrib.auth.decorators import login_required
 from django.core.files.base import ContentFile
 from django.db.models import Max
+from django.http import Http404, HttpResponse
 from django.shortcuts import render
+from django.utils.decorators import method_decorator
 from django.views.decorators.cache import never_cache
 from django.views.decorators.csrf import ensure_csrf_cookie
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.parsers import MultiPartParser
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
@@ -18,6 +20,7 @@ from apps.projects.models import Project
 
 from .image_processing import ImageProcessingError, process_upload
 from .models import Template, UploadedAsset, UserTemplate, UserTemplateRevision
+from .rendering import public_page_html
 from .serializers import (
     UploadedAssetSerializer,
     UserTemplateRevisionSerializer,
@@ -111,6 +114,30 @@ def template_wizard_view(request):
     return render(request, "editor/template_wizard.html", {})
 
 
+class PublicTemplateView(APIView):
+    """GET /t/<slug>/ — the public, anonymous-accessible page for a
+    published UserTemplate (FEATURE.md). Same 404 for "doesn't exist" and
+    "not published" — never let a visitor distinguish the two, so an
+    unpublished/private template can't be enumerated by slug guessing.
+    Read-only: no editor script, no data-vjpb-path attributes, nothing
+    mutates from here. Rate-limited like every other anonymous-facing
+    endpoint in the project (ScopedRateThrottle already keys by IP for
+    unauthenticated requests).
+    """
+
+    permission_classes = [AllowAny]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "public_template_view"
+
+    @method_decorator(never_cache)
+    def get(self, request, slug):
+        user_template = UserTemplate.objects.filter(public_slug=slug, is_published=True).first()
+        if not user_template:
+            raise Http404
+        html = public_page_html(user_template.state, title_fallback=user_template.name)
+        return HttpResponse(html)
+
+
 class UserTemplateViewSet(viewsets.ModelViewSet):
     serializer_class = UserTemplateSerializer
     permission_classes = [IsAuthenticated]
@@ -154,6 +181,18 @@ class UserTemplateViewSet(viewsets.ModelViewSet):
         if not deleted:
             return Response(status=status.HTTP_404_NOT_FOUND)
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+    @action(detail=True, methods=["post"])
+    def publish(self, request, pk=None):
+        user_template = self.get_object()  # already owner-scoped via get_queryset
+        user_template.publish()
+        return Response(UserTemplateSerializer(user_template).data)
+
+    @action(detail=True, methods=["post"])
+    def unpublish(self, request, pk=None):
+        user_template = self.get_object()  # already owner-scoped via get_queryset
+        user_template.unpublish()
+        return Response(UserTemplateSerializer(user_template).data)
 
 
 class WizardImageUploadView(APIView):

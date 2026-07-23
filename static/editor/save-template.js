@@ -24,6 +24,10 @@
   var nameInput = document.getElementById("saveTemplateNameInput");
   var historyToggle = document.getElementById("saveTemplateHistoryToggle");
   var historyList = document.getElementById("saveTemplateHistoryList");
+  var publishWrap = document.getElementById("saveTemplatePublish");
+  var publishBtn = document.getElementById("saveTemplatePublishBtn");
+  var unpublishBtn = document.getElementById("saveTemplateUnpublishBtn");
+  var publicUrlEl = document.getElementById("saveTemplatePublicUrl");
   if (!saveButton || !modal || !window.EditorCore) return;
 
   var userTemplateId = document.body.dataset.userTemplateId || "";
@@ -34,10 +38,52 @@
     if (backdrop) backdrop.classList.add("hidden");
   }
 
+  function renderPublishState(data) {
+    var isPublished = !!(data && data.is_published);
+    publishBtn.classList.toggle("hidden", isPublished);
+    unpublishBtn.classList.toggle("hidden", !isPublished);
+    if (isPublished && data.public_slug) {
+      var url = window.location.origin + "/t/" + data.public_slug + "/";
+      publicUrlEl.textContent = "Publicado: " + url;
+      publicUrlEl.classList.remove("hidden");
+    } else {
+      publicUrlEl.classList.add("hidden");
+    }
+  }
+
+  async function loadPublishState() {
+    try {
+      var response = await fetch("/api/user-templates/" + encodeURIComponent(userTemplateId) + "/", {
+        credentials: "same-origin",
+      });
+      if (response.ok) renderPublishState(await response.json());
+    } catch (e) {
+      /* ponytail: publish-state fetch is best-effort, the buttons just stay at their default state */
+    }
+  }
+
+  async function togglePublish(action) {
+    try {
+      var response = await fetch(
+        "/api/user-templates/" + encodeURIComponent(userTemplateId) + "/" + action + "/",
+        { method: "POST", credentials: "same-origin", headers: { "X-CSRFToken": getCsrfToken() } }
+      );
+      if (!response.ok) {
+        alert("No se pudo actualizar el estado de publicación.");
+        return;
+      }
+      renderPublishState(await response.json());
+    } catch (e) {
+      alert("No se pudo actualizar el estado de publicación.");
+    }
+  }
+
   function openModal() {
     var hasUserTemplate = !!userTemplateId;
     updateBtn.classList.toggle("hidden", !hasUserTemplate);
     historyToggle.classList.toggle("hidden", !hasUserTemplate);
+    publishWrap.classList.toggle("hidden", !hasUserTemplate);
+    if (hasUserTemplate) loadPublishState();
     historyOpen = false;
     historyList.classList.add("hidden");
     historyList.innerHTML = "";
@@ -151,6 +197,13 @@
       alert("No se pudo restaurar la versión.");
     }
   }
+
+  publishBtn.addEventListener("click", function () {
+    togglePublish("publish");
+  });
+  unpublishBtn.addEventListener("click", function () {
+    togglePublish("unpublish");
+  });
 
   historyToggle.addEventListener("click", function () {
     historyOpen = !historyOpen;

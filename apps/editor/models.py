@@ -38,6 +38,11 @@ class UserTemplate(models.Model):
     description = models.TextField(blank=True)
     accent = models.CharField(max_length=9, blank=True)
     state = models.JSONField()
+    is_published = models.BooleanField(default=False)
+    # Stable once set — never regenerated on unpublish/republish (see
+    # FEATURE.md 1.1). Random suffix avoids collisions across users with
+    # the same template name; not meant to be secret, just unique.
+    public_slug = models.SlugField(max_length=140, unique=True, null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -49,6 +54,21 @@ class UserTemplate(models.Model):
 
     def thumbnail_srcdoc(self):
         return thumbnail_srcdoc(self.state)
+
+    def publish(self):
+        if not self.public_slug:
+            import secrets
+
+            from django.utils.text import slugify
+
+            base = slugify(self.name)[:100] or "template"
+            self.public_slug = f"{base}-{secrets.token_hex(3)}"
+        self.is_published = True
+        self.save(update_fields=["is_published", "public_slug", "updated_at"])
+
+    def unpublish(self):
+        self.is_published = False
+        self.save(update_fields=["is_published", "updated_at"])
 
 
 class UserTemplateRevision(models.Model):

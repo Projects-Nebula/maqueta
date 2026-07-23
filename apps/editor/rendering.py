@@ -1,9 +1,11 @@
-"""Server-side mini-render of a template's `state` JSON for gallery thumbnails.
+"""Server-side rendering of a template's `state` JSON, outside the editor.
 
-Deliberately does not reuse the client-side `buildHtmlDocument` in
-editor-core.js (that IIFE is left untouched, see CLAUDE.md) — this is a much
-smaller, read-only subset: no scripts, no head metadata, just body markup +
-styles, enough for a scaled-down preview.
+Two renderers sharing the same node/style helpers: `thumbnail_srcdoc` (a
+small, head-metadata-free subset for gallery card previews) and
+`public_page_html` (a full standalone document for a published template's
+public page, FEATURE.md). Neither reuses the client-side `buildHtmlDocument`
+in editor-core.js (that IIFE is left untouched, see CLAUDE.md) and neither
+ever includes an editor script — both are read-only.
 """
 
 from html import escape
@@ -82,4 +84,36 @@ def thumbnail_srcdoc(state: dict | None) -> str | None:
         '<link rel="stylesheet" href="/static/editor/tailwind.css">'
         f"<style>body {{ margin: 0; }} {css}</style>"
         f"</head><body>{body_html}</body></html>"
+    )
+
+
+def public_page_html(state: dict | None, *, title_fallback: str = "Página") -> str | None:
+    """Full standalone HTML document for a published UserTemplate's public
+    page (FEATURE.md 1.2) — unlike thumbnail_srcdoc, includes real <head>
+    metadata (doctype, htmlAttributes, metas, title) since this is the
+    actual page an anonymous visitor sees, not a scaled-down preview.
+    Deliberately never references any editor script — read-only markup,
+    no editing surface for an anonymous visitor to reach."""
+    if not isinstance(state, dict):
+        return None
+    document = state.get("document") or {}
+    head = document.get("head") or {}
+    body = document.get("body") or {}
+    children = body.get("children") or []
+
+    body_html = "".join(_render_node(child) for child in children)
+    css = _render_styles(state.get("styles") or {})
+    metas_html = "".join(f"<meta{_render_attributes(meta)}>" for meta in (head.get("metas") or []))
+    title = escape(str(head.get("title") or title_fallback))
+    doctype = escape(str(document.get("doctype") or "html"))
+    html_attrs_html = _render_attributes(document.get("htmlAttributes") or {})
+    body_attrs_html = _render_attributes(body.get("attributes") or {})
+
+    return (
+        f"<!DOCTYPE {doctype}><html{html_attrs_html}><head>"
+        '<meta charset="UTF-8">'
+        f"{metas_html}<title>{title}</title>"
+        '<link rel="stylesheet" href="/static/editor/tailwind.css">'
+        f"<style>{css}</style>"
+        f"</head><body{body_attrs_html}>{body_html}</body></html>"
     )
