@@ -198,6 +198,20 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **AI rejected `max-w-4xl` and other named max-width classes.** The
+  `tailwind_classes.py` `max-w` utility family only allowed the numeric
+  spacing scale, missing Tailwind's separate named container-width scale
+  (`max-w-4xl`, `max-w-prose`, `max-w-none`, etc.) — one of the most common
+  classes for a page container, rejected outright as "disallowed Tailwind
+  class". `w`/`min-w`/`h`/`min-h`/`max-h` are unaffected.
+- **AI couldn't embed YouTube/Vimeo videos.** `<iframe>` was fully forbidden
+  by `sanitize.py`, so any instruction to embed a video failed with a generic
+  "cambios no válidos" error. `<iframe>` is now allowed, restricted to a
+  `src` allowlist (`youtube.com/embed/`, `youtube-nocookie.com/embed/`,
+  `player.vimeo.com/video/`) so arbitrary iframe embeds (a clickjacking/
+  phishing risk on now-publicly-published pages) are still rejected. The AI
+  prompt now converts `watch` URLs to `embed` URLs and uses `aspect-video`
+  instead of an arbitrary `pb-[56.25%]` padding hack.
 - **AI color instructions had no effect on gradient backgrounds.** For an
   element with an opaque `background: linear-gradient(...)`, the model emitted
   `background-color`, which renders *under* the gradient and stays invisible.
