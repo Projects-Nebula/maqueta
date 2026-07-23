@@ -15,10 +15,45 @@ from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 
 from .models import Order, Product
-from .payments import PaymentProviderError, build_payment_provider
+from .payments import FakePaymentProvider, PaymentProviderError, build_payment_provider
 from .serializers import ProductSerializer
 
 logger = logging.getLogger(__name__)
+
+
+def _record_order_for_session(provider, session_id, product_id):
+    """Create (or no-op if already created) the Order for a paid session.
+
+    The single source of truth for "a session was paid" — normally reached
+    only via StripeWebhookView (the real, signature-verified webhook).
+    CheckoutView also calls this directly, but ONLY when running against
+    FakePaymentProvider: there is no real Stripe server in dev/test to ever
+    deliver a webhook, so without this the fake provider's "instantly-
+    successful payment" (payments.py) would leave the buyer stuck on
+    "Procesando tu pago..." forever, since nothing else would ever create
+    the Order row. Never called this way for StripePaymentProvider — real
+    payments still require the actual signed webhook. Raises
+    PaymentProviderError on lookup failure — callers decide what HTTP
+    status that becomes.
+    """
+    status = provider.retrieve_session(session_id)
+
+    product = Product.objects.filter(pk=product_id).first() if product_id else None
+    order_status = Order.Status.PAID if status.payment_status == "paid" else Order.Status.FAILED
+
+    order, created = Order.objects.get_or_create(
+        stripe_session_id=session_id,
+        defaults={
+            "product": product,
+            "buyer_email": status.customer_email,
+            "amount_cents": status.amount_total,
+            "currency": status.currency,
+            "status": order_status,
+        },
+    )
+    if created and order.status == Order.Status.PAID and product and product.digital_file:
+        order.download_token = Order.generate_download_token()
+        order.save(update_fields=["download_token"])
 
 
 class ProductViewSet(viewsets.ModelViewSet):
@@ -86,6 +121,16 @@ class CheckoutView(APIView):
         except PaymentProviderError:
             logger.exception("checkout session creation failed for product %s", product_id)
             return Response({"error": "checkout_unavailable"}, status=502)
+
+        if isinstance(provider, FakePaymentProvider):
+            # No real Stripe server exists in dev/test to ever deliver the
+            # webhook — record the order immediately, matching what the fake
+            # provider already pretends happened (an instantly-successful
+            # payment). Real Stripe checkouts never take this path.
+            try:
+                _record_order_for_session(provider, session.id, str(product.id))
+            except PaymentProviderError:
+                logger.exception("could not record fake order for session %s", session.id)
 
         return HttpResponseRedirect(session.url)
 
@@ -179,32 +224,15 @@ class StripeWebhookView(APIView):
             else event["data"]["object"]
         )
         session_id = session_obj.get("id") if isinstance(session_obj, dict) else session_obj["id"]
-
-        try:
-            status = provider.retrieve_session(session_id)
-        except PaymentProviderError:
-            logger.exception("could not retrieve session %s for webhook processing", session_id)
-            return Response(status=502)
-
         product_id = (
             session_obj.get("client_reference_id") if isinstance(session_obj, dict) else None
         )
-        product = Product.objects.filter(pk=product_id).first() if product_id else None
-        order_status = Order.Status.PAID if status.payment_status == "paid" else Order.Status.FAILED
 
-        order, created = Order.objects.get_or_create(
-            stripe_session_id=session_id,
-            defaults={
-                "product": product,
-                "buyer_email": status.customer_email,
-                "amount_cents": status.amount_total,
-                "currency": status.currency,
-                "status": order_status,
-            },
-        )
-        if created and order.status == Order.Status.PAID and product and product.digital_file:
-            order.download_token = Order.generate_download_token()
-            order.save(update_fields=["download_token"])
+        try:
+            _record_order_for_session(provider, session_id, product_id)
+        except PaymentProviderError:
+            logger.exception("could not retrieve session %s for webhook processing", session_id)
+            return Response(status=502)
 
         return Response(status=200)
 

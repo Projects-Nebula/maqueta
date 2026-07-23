@@ -1,7 +1,7 @@
 import pytest
 from rest_framework.test import APIClient
 
-from apps.storefront.models import Product
+from apps.storefront.models import Order, Product
 
 pytestmark = pytest.mark.django_db
 
@@ -46,6 +46,23 @@ def test_checkout_works_for_a_logged_in_session_without_csrf_header(user):
     client.login(username="alice", password="pw-alice-123")
     response = client.post(URL.format(product.id))
     assert response.status_code == 302
+
+
+def test_checkout_with_fake_provider_creates_order_immediately(anon_api, user):
+    # In dev/test (PAYMENT_PROVIDER=fake, the default without real Stripe
+    # keys) there is no real Stripe server to ever deliver the webhook that
+    # normally creates the Order. Without recording it directly from
+    # CheckoutView for this provider, a buyer would land on the success page
+    # and see "Procesando tu pago..." forever, since nothing else would ever
+    # create the row (reproduced live: a real browser session got stuck on
+    # this exact screen).
+    product = Product.objects.create(owner=user, name="Ebook", price_cents=1999)
+    response = anon_api.post(URL.format(product.id))
+    assert response.status_code == 302
+    session_id = response.headers["Location"].split("session_id=")[-1]
+    order = Order.objects.get(stripe_session_id=session_id)
+    assert order.status == Order.Status.PAID
+    assert order.product_id == product.id
 
 
 def test_checkout_ignores_client_supplied_price(anon_api, user):
