@@ -206,6 +206,14 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **Checkout/webhook rejected logged-in sessions with a CSRF 403.**
+  `CheckoutView`/`StripeWebhookView` are `@csrf_exempt` + `AllowAny`, but
+  DRF's default `SessionAuthentication` runs its own CSRF check independent
+  of that decorator whenever it authenticates a request via session —
+  a logged-in visitor (e.g. the product's own owner testing their "Comprar"
+  button) got `CSRF Failed: CSRF token missing.` despite the view being
+  explicitly exempt. Fixed with `authentication_classes = []` on both (no
+  reason to authenticate a fully public endpoint at all).
 - **AI rejected `max-w-4xl` and other named max-width classes.** The
   `tailwind_classes.py` `max-w` utility family only allowed the numeric
   spacing scale, missing Tailwind's separate named container-width scale
