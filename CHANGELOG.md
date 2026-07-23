@@ -231,6 +231,13 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **Legacy `/comprar/<id>/` (no gateway) 404'd on already-published pages.**
+  The multi-gateway checkout migration requires a gateway segment
+  (`/comprar/<id>/<gateway>/`), but a buy button baked into a
+  `UserTemplate`'s saved state from before that shipped still points at
+  the old URL shape — an already-published page's "Comprar" button 404'd.
+  A legacy URL now falls back to the seller's first enabled gateway
+  instead (still 404s if the seller has enabled nothing at all).
 - **Checkout with the fake payment provider got stuck forever on
   "Procesando tu pago…".** With no real Stripe keys configured (the
   project's default dev/test posture), `FakePaymentProvider` marks a
