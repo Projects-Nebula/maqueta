@@ -1091,6 +1091,7 @@
 ${metas}
 <title>${escapeHtml(head.title || "Página")}</title>
 ${links}
+<link rel="stylesheet" href="/static/editor/tailwind.css">
 <style data-vjpb-page-style="true">
 ${buildCss()}
 </style>
@@ -2349,36 +2350,77 @@ ${body}
         return value.split(/\s+/).map(item => item.trim()).filter(Boolean);
       }
 
-      function parseStyleString(value) {
-        const output = {};
-        value.split(";").forEach(part => {
-          const [key, ...rest] = part.split(":");
-          if (!key || !rest.length) return;
-          output[key.trim()] = rest.join(":").trim();
-        });
-        return output;
+      // --- Tailwind utility-class quick-style controls --------------------
+      // Replaces the old setInlineStyleProperty-based "Estilo rápido" panel:
+      // instead of an inline style="" attribute, each control adds/removes a
+      // Tailwind class token on attributes.class, one family at a time (the
+      // matcher identifies every existing token from that same family so a
+      // new pick replaces the old one instead of stacking both).
+      const UTILITY_FAMILY_MATCHERS = {
+        bg: c => /^bg-(slate|gray|zinc|neutral|stone|red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose)-\d+$/.test(c)
+          || /^bg-\[var\(/.test(c) || c === "bg-white" || c === "bg-black" || c === "bg-transparent",
+        text_color: c => /^text-(slate|gray|zinc|neutral|stone|red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose)-\d+$/.test(c)
+          || /^text-\[var\(/.test(c) || c === "text-white" || c === "text-black",
+        padding: c => /^p-/.test(c),
+        margin: c => /^m-/.test(c),
+        width: c => /^w-/.test(c),
+        text_align: c => ["text-left", "text-center", "text-right", "text-justify"].includes(c),
+      };
+
+      function getClassList(node) {
+        const attrs = node.attributes || {};
+        if (Array.isArray(attrs.class)) return [...attrs.class];
+        return attrs.class ? attrs.class.split(/\s+/).filter(Boolean) : [];
       }
 
-      function serializeStyle(styleObject) {
-        return Object.entries(styleObject)
-          .filter(([key, value]) => key && value)
-          .map(([key, value]) => `${key}: ${value}`)
-          .join("; ");
-      }
-
-      function getInlineStyle(node) {
-        return parseStyleString(node.attributes?.style || "");
-      }
-
-      function setInlineStyleProperty(node, property, value) {
+      function setClassList(node, classes) {
         node.attributes ||= {};
-        const style = getInlineStyle(node);
-        if (value) style[property] = value;
-        else delete style[property];
-        const serialized = serializeStyle(style);
-        if (serialized) node.attributes.style = serialized;
-        else delete node.attributes.style;
+        if (classes.length) node.attributes.class = classes;
+        else delete node.attributes.class;
       }
+
+      function firstMatchingClass(node, family) {
+        return getClassList(node).find(UTILITY_FAMILY_MATCHERS[family]) || "";
+      }
+
+      function setUtilityClass(node, family, newToken) {
+        const classes = getClassList(node).filter(c => !UTILITY_FAMILY_MATCHERS[family](c));
+        if (newToken) classes.push(newToken);
+        setClassList(node, classes);
+      }
+
+      // Small curated pick-lists for the quick-style dropdowns — not every
+      // Tailwind value, just common ones. The free-text "Clases CSS" field
+      // covers anything else.
+      const TAILWIND_QUICK_BG_OPTIONS = [
+        ["", "Ninguno"],
+        ["bg-[var(--color-primary)]", "Color principal"],
+        ["bg-white", "Blanco"],
+        ["bg-slate-100", "Gris claro"],
+        ["bg-slate-900", "Gris oscuro"],
+        ["bg-blue-500", "Azul"],
+        ["bg-emerald-500", "Verde"],
+        ["bg-amber-500", "Amarillo"],
+        ["bg-red-500", "Rojo"],
+      ];
+      const TAILWIND_QUICK_TEXT_COLOR_OPTIONS = [
+        ["", "Ninguno"],
+        ["text-[var(--color-primary)]", "Color principal"],
+        ["text-white", "Blanco"],
+        ["text-slate-900", "Gris oscuro"],
+        ["text-slate-500", "Gris medio"],
+        ["text-blue-500", "Azul"],
+        ["text-red-500", "Rojo"],
+      ];
+      const TAILWIND_QUICK_SPACING_SCALE = ["", "2", "4", "6", "8", "12", "16", "24"];
+      const TAILWIND_QUICK_WIDTH_OPTIONS = [
+        ["", "Predeterminado"],
+        ["w-full", "Completo (100%)"],
+        ["w-1/2", "Mitad (50%)"],
+        ["w-1/3", "Un tercio"],
+        ["w-2/3", "Dos tercios"],
+        ["w-auto", "Automático"],
+      ];
 
       function renderInspector() {
         const node = getNode(selectedPath);
@@ -2412,7 +2454,6 @@ ${body}
         const attrs = node.attributes || {};
         const classes = Array.isArray(attrs.class) ? attrs.class.join(" ") : (attrs.class || "");
         const text = firstTextNode(node)?.value || "";
-        const style = getInlineStyle(node);
 
         els.inspector.innerHTML = `
           <div class="section-card">
@@ -2463,34 +2504,45 @@ ${body}
 
             <div class="style-fields">
               <h3>Estilo rápido del elemento</h3>
+              <p class="panel-help">Clases Tailwind — se agregan/reemplazan en "Clases CSS" de arriba.</p>
               <div class="form-grid two">
                 <label class="field">
                   <span>Color de fondo</span>
-                  <input class="control" id="nodeBackground" type="text" placeholder="#ffffff">
+                  <select class="control" id="nodeBackground">
+                    ${TAILWIND_QUICK_BG_OPTIONS.map(([value, label]) => `<option value="${value}">${label}</option>`).join("")}
+                  </select>
                 </label>
                 <label class="field">
                   <span>Color de texto</span>
-                  <input class="control" id="nodeColor" type="text" placeholder="#111827">
+                  <select class="control" id="nodeColor">
+                    ${TAILWIND_QUICK_TEXT_COLOR_OPTIONS.map(([value, label]) => `<option value="${value}">${label}</option>`).join("")}
+                  </select>
                 </label>
                 <label class="field">
                   <span>Padding</span>
-                  <input class="control" id="nodePadding" type="text" placeholder="24px">
+                  <select class="control" id="nodePadding">
+                    ${TAILWIND_QUICK_SPACING_SCALE.map(n => `<option value="${n ? "p-" + n : ""}">${n ? "p-" + n : "Ninguno"}</option>`).join("")}
+                  </select>
                 </label>
                 <label class="field">
                   <span>Margen</span>
-                  <input class="control" id="nodeMargin" type="text" placeholder="0 auto">
+                  <select class="control" id="nodeMargin">
+                    ${TAILWIND_QUICK_SPACING_SCALE.map(n => `<option value="${n ? "m-" + n : ""}">${n ? "m-" + n : "Ninguno"}</option>`).join("")}
+                  </select>
                 </label>
                 <label class="field">
                   <span>Ancho</span>
-                  <input class="control" id="nodeWidth" type="text" placeholder="100%">
+                  <select class="control" id="nodeWidth">
+                    ${TAILWIND_QUICK_WIDTH_OPTIONS.map(([value, label]) => `<option value="${value}">${label}</option>`).join("")}
+                  </select>
                 </label>
                 <label class="field">
                   <span>Alineación de texto</span>
                   <select class="control" id="nodeTextAlign">
                     <option value="">Predeterminada</option>
-                    <option value="left">Izquierda</option>
-                    <option value="center">Centro</option>
-                    <option value="right">Derecha</option>
+                    <option value="text-left">Izquierda</option>
+                    <option value="text-center">Centro</option>
+                    <option value="text-right">Derecha</option>
                   </select>
                 </label>
               </div>
@@ -2506,12 +2558,12 @@ ${body}
         document.getElementById("nodeSrc").value = attrs.src || "";
         document.getElementById("nodeAlt").value = attrs.alt || "";
         document.getElementById("nodeAriaLabel").value = attrs["aria-label"] || "";
-        document.getElementById("nodeBackground").value = style.background || style["background-color"] || "";
-        document.getElementById("nodeColor").value = style.color || "";
-        document.getElementById("nodePadding").value = style.padding || "";
-        document.getElementById("nodeMargin").value = style.margin || "";
-        document.getElementById("nodeWidth").value = style.width || "";
-        document.getElementById("nodeTextAlign").value = style["text-align"] || "";
+        document.getElementById("nodeBackground").value = firstMatchingClass(node, "bg");
+        document.getElementById("nodeColor").value = firstMatchingClass(node, "text_color");
+        document.getElementById("nodePadding").value = firstMatchingClass(node, "padding");
+        document.getElementById("nodeMargin").value = firstMatchingClass(node, "margin");
+        document.getElementById("nodeWidth").value = firstMatchingClass(node, "width");
+        document.getElementById("nodeTextAlign").value = firstMatchingClass(node, "text_align");
 
         function bindInspector(id, callback, eventName = "input") {
           document.getElementById(id).addEventListener(eventName, event => {
@@ -2548,12 +2600,18 @@ ${body}
         bindInspector("nodeSrc", value => setAttribute(node, "src", value));
         bindInspector("nodeAlt", value => setAttribute(node, "alt", value));
         bindInspector("nodeAriaLabel", value => setAttribute(node, "aria-label", value));
-        bindInspector("nodeBackground", value => setInlineStyleProperty(node, "background", value));
-        bindInspector("nodeColor", value => setInlineStyleProperty(node, "color", value));
-        bindInspector("nodePadding", value => setInlineStyleProperty(node, "padding", value));
-        bindInspector("nodeMargin", value => setInlineStyleProperty(node, "margin", value));
-        bindInspector("nodeWidth", value => setInlineStyleProperty(node, "width", value));
-        bindInspector("nodeTextAlign", value => setInlineStyleProperty(node, "text-align", value), "change");
+        function bindUtilityClass(id, family) {
+          bindInspector(id, value => {
+            setUtilityClass(node, family, value);
+            document.getElementById("nodeClasses").value = getClassList(node).join(" ");
+          }, "change");
+        }
+        bindUtilityClass("nodeBackground", "bg");
+        bindUtilityClass("nodeColor", "text_color");
+        bindUtilityClass("nodePadding", "padding");
+        bindUtilityClass("nodeMargin", "margin");
+        bindUtilityClass("nodeWidth", "width");
+        bindUtilityClass("nodeTextAlign", "text_align");
       }
 
       function setAttribute(node, name, value) {

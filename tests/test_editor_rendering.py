@@ -62,6 +62,12 @@ def test_includes_style_rules_and_variables():
     assert "--accent: #123456" in html
 
 
+def test_includes_compiled_tailwind_css_link():
+    state = _state(children=[{"type": "element", "tag": "div", "attributes": {}, "children": []}])
+    html = thumbnail_srcdoc(state)
+    assert '<link rel="stylesheet" href="/static/editor/tailwind.css">' in html
+
+
 def test_includes_media_query_rules():
     state = _state(
         children=[{"type": "element", "tag": "div", "attributes": {}, "children": []}],

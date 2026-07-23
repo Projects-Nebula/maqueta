@@ -79,6 +79,7 @@ def thumbnail_srcdoc(state: dict | None) -> str | None:
 
     return (
         '<!DOCTYPE html><html><head><meta charset="UTF-8">'
+        '<link rel="stylesheet" href="/static/editor/tailwind.css">'
         f"<style>body {{ margin: 0; }} {css}</style>"
         f"</head><body>{body_html}</body></html>"
     )
