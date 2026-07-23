@@ -48,10 +48,17 @@ class CheckoutView(APIView):
     only the product id; everything charged comes from the DB row
     (FEATURE.md 1.6). CSRF-exempt: an anonymous buyer has no CSRF cookie to
     present; integrity comes from the server-side product lookup, not a
-    form token.
+    form token. authentication_classes=[]: DRF's SessionAuthentication runs
+    its OWN CSRF check independent of csrf_exempt whenever it successfully
+    authenticates a request — a logged-in visitor (e.g. the template's own
+    owner, testing their own buy button) would otherwise still get a CSRF
+    403 despite the decorator above. Not a problem here: permission_classes
+    is already AllowAny, so there's no reason to authenticate the requester
+    at all for this public, unauthenticated action.
     """
 
     permission_classes = [AllowAny]
+    authentication_classes = []
     throttle_classes = [ScopedRateThrottle]
     throttle_scope = "checkout_session_create"
 
@@ -141,10 +148,14 @@ class StripeWebhookView(APIView):
     """POST /webhooks/stripe/ — the ONLY place an Order is created. Never
     rate-limited (a dropped legitimate webhook silently loses an order) and
     never CSRF-checked (Stripe can't present a token) — authenticity comes
-    entirely from signature verification.
+    entirely from signature verification. authentication_classes=[]: see
+    CheckoutView's docstring — SessionAuthentication's own CSRF check is
+    independent of csrf_exempt, and there's no legitimate requester to
+    authenticate here anyway (Stripe, not a browser session).
     """
 
     permission_classes = [AllowAny]
+    authentication_classes = []
 
     def post(self, request):
         provider = build_payment_provider(settings)

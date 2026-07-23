@@ -1,4 +1,5 @@
 import pytest
+from rest_framework.test import APIClient
 
 from apps.storefront.models import Product
 
@@ -29,6 +30,21 @@ def test_checkout_works_anonymously(anon_api, user):
     # The whole point: no auth/session needed to buy.
     product = Product.objects.create(owner=user, name="Ebook", price_cents=1999)
     response = anon_api.post(URL.format(product.id))
+    assert response.status_code == 302
+
+
+def test_checkout_works_for_a_logged_in_session_without_csrf_header(user):
+    # api/anon_api use force_authenticate, which bypasses DRF's real
+    # auth+CSRF pipeline entirely and would never have caught this: a real
+    # browser session (e.g. the product's own owner, logged into the editor,
+    # clicking their own "Comprar" button) goes through DRF's
+    # SessionAuthentication, which enforces its OWN CSRF check independent
+    # of the view's @csrf_exempt — a plain HTML <form method="post"> with no
+    # CSRF token/header used to get rejected with 403 for exactly this user.
+    product = Product.objects.create(owner=user, name="Ebook", price_cents=1999)
+    client = APIClient(enforce_csrf_checks=True)
+    client.login(username="alice", password="pw-alice-123")
+    response = client.post(URL.format(product.id))
     assert response.status_code == 302
 
 
