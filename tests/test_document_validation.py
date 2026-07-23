@@ -24,7 +24,7 @@ VALID_DOCUMENT = {
             "scripts": [],
         },
         "body": {
-            "attributes": {"class": ["page"]},
+            "attributes": {"class": ["flex", "flex-col"]},
             "children": [
                 {
                     "type": "element",

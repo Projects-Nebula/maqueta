@@ -420,7 +420,14 @@ def iter_all_allowed_classes() -> Iterator[str]:
 def check_class_list(value) -> None:
     """value is whatever came from a node's `attributes.class` — str or
     list of str, per operations.py's `_validate_class_or_text`."""
-    tokens = value if isinstance(value, list) else value.split()
+    if isinstance(value, list):
+        if not all(isinstance(v, str) for v in value):
+            raise SanitizationError("class list must be strings")
+        tokens = value
+    elif isinstance(value, str):
+        tokens = value.split()
+    else:
+        raise SanitizationError("class value must be a string or list")
     if len(tokens) > MAX_CLASSES_PER_NODE:
         raise SanitizationError("too many classes on one element")
     for token in tokens:

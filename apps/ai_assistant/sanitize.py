@@ -237,6 +237,12 @@ def check_asset_entry(asset_id: str, entry: dict) -> None:
 
 
 def check_attributes(attributes: dict) -> None:
+    # Deferred import: tailwind_classes.py imports SanitizationError from
+    # this module, so importing it back at module level here would be
+    # circular. By the time this function actually runs, both modules are
+    # fully loaded.
+    from .tailwind_classes import check_class_list
+
     if not isinstance(attributes, dict):
         raise SanitizationError("attributes must be an object")
     for name, value in attributes.items():
@@ -246,6 +252,8 @@ def check_attributes(attributes: dict) -> None:
             raise SanitizationError("inline style attribute not allowed")
         if lowered in URL_ATTRS:
             check_url_value(value)
+        if lowered == "class":
+            check_class_list(value)
 
 
 def sanitize_node(node, *, _depth=0, _counter=None) -> None:

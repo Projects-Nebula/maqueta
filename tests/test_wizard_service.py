@@ -15,7 +15,7 @@ VALID_SKELETON = {
         "htmlAttributes": {"lang": "es", "dir": "ltr"},
         "head": {"title": "Mi negocio", "metas": [], "links": [], "scripts": []},
         "body": {
-            "attributes": {"class": ["page"]},
+            "attributes": {"class": ["flex", "flex-col"]},
             "children": [{"type": "element", "tag": "h1", "attributes": {}, "children": []}],
         },
     },

@@ -13,7 +13,7 @@ URL = "/api/ai/editor/transform/"
 VALID_NODE = {
     "type": "element",
     "tag": "a",
-    "attributes": {"class": ["button"], "href": "#contacto"},
+    "attributes": {"class": ["px-4", "py-2", "bg-blue-500"], "href": "#contacto"},
     "children": [{"type": "text", "value": "Ver beneficios"}],
 }
 

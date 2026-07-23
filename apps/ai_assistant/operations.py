@@ -16,6 +16,7 @@ from .sanitize import (
     check_url_value,
     sanitize_node,
 )
+from .tailwind_classes import check_class_list
 
 POSITIONS = {"before", "after", "inside"}
 
@@ -64,6 +65,10 @@ def _validate_class_or_text(attribute, value):
             _require(all(isinstance(v, str) for v in value), "class list must be strings")
         else:
             _require(isinstance(value, str), "class value must be a string or list")
+        try:
+            check_class_list(value)
+        except SanitizationError as exc:
+            raise OperationValidationError(str(exc)) from exc
     else:
         _require(isinstance(value, str), f"{attribute} value must be a string")
         if attribute in URL_ATTRS:
