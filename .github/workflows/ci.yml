@@ -44,6 +44,12 @@ jobs:
         with:
           node-version: "24"
 
+      - name: Install Node dependencies
+        run: npm install
+
+      - name: Build Tailwind CSS
+        run: npm run build:css
+
       - name: ruff check
         run: uv run ruff check .
 

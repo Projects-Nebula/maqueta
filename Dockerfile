@@ -15,6 +15,16 @@ COPY . .
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev
 
+# Node is build-time only (Tailwind CLI), never present in the runtime
+# image. Debian bookworm's apt nodejs is 18.x, too old for Tailwind v4
+# (needs 20+) — install from NodeSource instead.
+RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates gnupg \
+    && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && apt-get install -y --no-install-recommends nodejs \
+    && rm -rf /var/lib/apt/lists/*
+RUN --mount=type=cache,target=/root/.cache/npm \
+    npm install && npm run build:css
+
 
 FROM python:3.12-slim-bookworm AS runtime
 
@@ -28,8 +38,12 @@ WORKDIR /app
 COPY --from=builder --chown=app:app /app /app
 
 # Collect static assets (needs a key, but never the real one at build time).
+# tailwind-input.css is a build SOURCE (its @import "tailwindcss" isn't a
+# real relative asset reference) — exclude it and the generated safelist
+# from WhiteNoise's manifest post-processing.
 RUN DJANGO_SECRET_KEY=build-only DATABASE_URL=sqlite:////tmp/build.sqlite3 \
-    python manage.py collectstatic --noinput
+    python manage.py collectstatic --noinput \
+    --ignore=tailwind-input.css --ignore=.tailwind-safelist.txt
 
 USER appuser
 EXPOSE 8000

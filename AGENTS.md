@@ -10,6 +10,8 @@ not what the project is.
 
 ```bash
 uv sync
+npm install
+npm run build:css                           # compiles static/editor/tailwind.css
 docker compose up -d db                     # local PostgreSQL
 uv run python manage.py migrate
 uv run python manage.py createsuperuser
@@ -19,6 +21,13 @@ uv run python manage.py runserver           # http://localhost:8000/home/
 `.env` is read once at process start (`environ.Env.read_env()` in
 `config/settings/base.py`) — changing it requires a full server restart, the
 autoreloader does NOT pick it up (it only watches `.py`/`.html`/`.js`).
+
+Styling is Tailwind CSS (utility classes on `attributes.class`, see
+`apps/ai_assistant/tailwind_classes.py`) — `npm run build:css` must be rerun
+after changing the class allowlist there, since it regenerates the safelist
+that drives the Tailwind CLI build. Needs Node 20+ (Tailwind v4).
+`static/editor/tailwind.css` and `.tailwind-safelist.txt` are gitignored
+build artifacts, never commit them.
 
 ## Before calling anything "done"
 

@@ -55,8 +55,10 @@ apps/projects      Project + ProjectRevision API (owner-scoped)
 templates/         registration/login · editor/editor.html · editor/home.html ·
                    editor/gallery.html · editor/template_wizard.html
 static/editor/     editor.css · editor-core.js · editor-ai.js · seed-loader.js ·
-                   save-template.js · wizard.css · template-wizard.js
-tests/             pytest + tests/js/apply.test.js (Node)
+                   save-template.js · wizard.css · template-wizard.js ·
+                   autosave.js · tailwind-input.css (source) ·
+                   tailwind.css (compiled, gitignored, `npm run build:css`)
+tests/             pytest + tests/js/apply.test.js (Node) + tests/e2e/ (Playwright)
 openspec/          this spec set (project.md · specs/ · changes/)
 ```
 
@@ -163,13 +165,33 @@ docker compose up --build
   a `.py` module, `rm` its stale `__pycache__/*.pyc` or the dev reloader
   keeps importing it → crash loop.
 - Production exempts `/healthz/` from SSL redirect for the container healthcheck.
-- The AI panel polls selection every 400ms (`editor-ai.js`) instead of patching
-  the core; the same poll positions the floating action bar and binds the
-  click-outside-to-deselect handler.
-- `AI_MAX_OPERATIONS` (default 150) caps ops per AI response. Each CSS property is
-  its own `set_css_declaration` op, so generating a styled section is op-heavy —
-  keep the cap generous or the model's valid output gets rejected as
-  "too many operations".
+- The AI panel is event-driven, not polled: `editor-core.js` dispatches
+  `vjpb:selection-change` (from `highlightSelectedPreviewElement`) and
+  `vjpb:state-committed` (from `commitHistorySnapshot`) on the preview
+  document; `editor-ai.js`/`autosave.js` listen for those instead of a
+  timer, rebinding on iframe `load` since `srcdoc` reload replaces
+  `contentDocument`.
+- **Styling is Tailwind CSS**, not custom CSS rules. The AI/editor style
+  elements via `set_attribute`/`class` with Tailwind utility classes,
+  validated against the finite allowlist in
+  `apps/ai_assistant/tailwind_classes.py` (`is_allowed_tailwind_class`/
+  `check_class_list`) — the same security role `CSS_PROPERTY_ALLOWLIST`
+  played before. `styles.rules`/`mediaQueries`/`keyframes` still exist and
+  still render (`buildCss()`, `rendering.py`) for backward compatibility
+  with pre-Tailwind saved pages, but new content never writes to them;
+  `set_css_declaration`/`remove_css_declaration` stay valid operations only
+  for editing that legacy content. `styles.variables` (CSS custom
+  properties, e.g. `--color-primary`) is unaffected — Tailwind classes
+  reference them via `bg-[var(--color-primary)]`.
+- Tailwind's CLI auto-scans the whole project for candidate class names by
+  default — **verified** this compiles literally any Tailwind-shaped string
+  found anywhere, including test fixtures (a security-test string
+  `"bg-[url(evil)]"` got compiled into the output before this was caught).
+  `tailwind-input.css` uses `@import "tailwindcss" source(none)` plus an
+  explicit `@source` pointing only at the generated safelist file
+  (`.tailwind-safelist.txt`, from `generate_tailwind_safelist`) — never
+  remove `source(none)`.
+- `AI_MAX_OPERATIONS` (default 150) caps ops per AI response.
 - `AI_PROVIDER` selects the provider; `fake` (default when no key) makes the
   whole flow work offline and is what tests rely on.
 - `AI_MAX_OUTPUT_TOKENS` (default 32000) caps model output tokens. Without it

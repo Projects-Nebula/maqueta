@@ -1,2 +1,8 @@
-@import "tailwindcss";
+/* source(none): Tailwind v4 auto-scans the whole project by default for
+ * candidate class names in ANY file — including test fixtures/docstrings
+ * containing Tailwind-shaped strings (verified: a security-test string
+ * "bg-[url(evil)]" in tests/test_tailwind_classes.py got compiled into the
+ * output before this was added). The safelist file below is the ONLY
+ * source of truth for what gets compiled — see REFACTOR.md Section 1.2. */
+@import "tailwindcss" source(none);
 @source "./.tailwind-safelist.txt";
