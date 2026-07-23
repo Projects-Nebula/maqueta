@@ -121,6 +121,10 @@ After solving a problem:
 - Do not "clean up" `static/editor/editor-core.js` — it's the original
   editor IIFE verbatim plus a facade appended inside it. See
   `openspec/project.md` gotchas before touching it.
+- **Never trust client-supplied money amounts.** The checkout view
+  (`apps/storefront`) always re-reads `Product.price_cents` from the DB —
+  never a price/currency from the request. An `Order` is created only by
+  the signature-verified Stripe webhook, never by the redirect view.
 
 ## Testing AI-backed endpoints manually
 

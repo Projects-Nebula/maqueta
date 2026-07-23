@@ -52,12 +52,20 @@ apps/ai_assistant  sanitize · operations · providers (Anthropic/OpenAI-compati
                    · wizard_views · document_validation (sanitizes a FULL
                    generated document, strict key checks at every level) · sse
 apps/projects      Project + ProjectRevision API (owner-scoped)
+apps/storefront    Product · Order models; ProductViewSet (owner-scoped);
+                   /comprar/<id>/, /webhooks/stripe/, /gracias/, /descargas/<token>/
+                   (all anonymous-facing); payments.py (PaymentProvider/
+                   FakePaymentProvider/StripePaymentProvider, same swappable
+                   pattern as apps.ai_assistant.providers)
 templates/         registration/login · editor/editor.html · editor/home.html ·
-                   editor/gallery.html · editor/template_wizard.html
+                   editor/gallery.html · editor/template_wizard.html ·
+                   storefront/products.html · storefront/success.html ·
+                   storefront/checkout_cancel.html
 static/editor/     editor.css · editor-core.js · editor-ai.js · seed-loader.js ·
                    save-template.js · wizard.css · template-wizard.js ·
                    autosave.js · tailwind-input.css (source) ·
                    tailwind.css (compiled, gitignored, `npm run build:css`)
+static/storefront/ products.js (owner's /productos/ management page)
 tests/             pytest + tests/js/apply.test.js (Node) + tests/e2e/ (Playwright)
 openspec/          this spec set (project.md · specs/ · changes/)
 ```
@@ -194,6 +202,26 @@ docker compose up --build
 - `AI_MAX_OPERATIONS` (default 150) caps ops per AI response.
 - `AI_PROVIDER` selects the provider; `fake` (default when no key) makes the
   whole flow work offline and is what tests rely on.
+- `PAYMENT_PROVIDER` (apps/storefront) mirrors `AI_PROVIDER`'s posture
+  exactly — `fake` by default, `stripe` only once `STRIPE_SECRET_KEY` is
+  set. Tests must never hit the real Stripe API; use `FakePaymentProvider`.
+- `apps/storefront`'s checkout (`/comprar/<id>/`) and webhook
+  (`/webhooks/stripe/`) views are the only two `@csrf_exempt` views in the
+  project — an anonymous buyer and Stripe itself have no CSRF cookie to
+  present. Do not broaden that exemption elsewhere; the webhook's integrity
+  instead comes from mandatory signature verification
+  (`stripe.Webhook.construct_event`), and the checkout view never trusts a
+  client-supplied price (always re-reads `Product.price_cents` from the DB).
+- An `Order` (`apps/storefront`) is created ONLY by the verified webhook,
+  never by the checkout-redirect view (which runs before payment is
+  confirmed) — the webhook fires asynchronously, so `GET /gracias/` (the
+  success page) must not assume the `Order` already exists; it falls back
+  to a direct `PaymentProvider.retrieve_session` lookup instead of
+  fabricating a download link.
+- `GET /t/<slug>/` (public template page) and `GET /descargas/<token>/`
+  (digital download) both 404 identically for "doesn't exist" and
+  "not allowed" — never let either be distinguishable, so neither an
+  unpublished template nor an unpaid order can be enumerated.
 - `AI_MAX_OUTPUT_TOKENS` (default 32000) caps model output tokens. Without it
   set explicitly (or set too low), a full-page wizard generation (lots of
   styles.rules JSON) can get cut off mid-response by the provider's own
