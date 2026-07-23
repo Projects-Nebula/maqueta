@@ -8,6 +8,33 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **Public template publishing + storefront.** A signed-in user can publish
+  a `UserTemplate` (`is_published`/`public_slug`, stable once set) — anyone,
+  logged in or not, can then open `GET /t/<slug>/` and see it rendered
+  server-side (`apps/editor/rendering.py`'s new `public_page_html`, a full
+  standalone document, no editor scripts, same backward-compat posture as
+  the Tailwind migration below). New `apps/storefront` app adds `Product`
+  (price, optional image, optional downloadable file validated by real
+  magic-byte sniffing) and `Order` (the permanent purchase record, created
+  only by a signature-verified Stripe webhook, never the checkout-redirect
+  view). Checkout (`POST /comprar/<id>/`) always re-reads the price from
+  the DB — never trusts the client. A `PaymentProvider` abstraction
+  (`FakePaymentProvider`/`StripePaymentProvider`) mirrors the existing
+  `AIProvider` swappable pattern — tests and local dev never touch the real
+  Stripe API. Digital downloads are served through a token-gated view
+  (`GET /descargas/<token>/`, never a static `/media/` URL) with a
+  download-count cap; the success page (`GET /gracias/`) explicitly
+  handles the webhook-vs-checkout-redirect race condition instead of
+  assuming the order already exists. Editor UI: a Publicar/Despublicar
+  toggle in the save modal, a `/productos/` management page, and an
+  "Insertar producto" control that adds a real product card with a working
+  "Comprar" form. Out of scope for this pass (see `BACKLOG.csv` if picked
+  up later): Stripe Connect/per-owner payouts, multi-item carts,
+  subscriptions, email delivery of the download link, a public
+  marketplace/directory. Real Stripe test-mode keys weren't available to
+  verify the actual hosted-Stripe-checkout-page round trip in this
+  environment — everything else was verified end-to-end with real
+  Playwright runs against the fake payment provider.
 - **Tailwind CSS migration.** Styling moved from a custom JSON DSL
   (`styles.rules`: AI/editor-authored `{selector, declarations}` objects) to
   Tailwind utility classes on each node's `attributes.class`.
