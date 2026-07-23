@@ -24,7 +24,6 @@
   var nameInput = document.getElementById("saveTemplateNameInput");
   var historyToggle = document.getElementById("saveTemplateHistoryToggle");
   var historyList = document.getElementById("saveTemplateHistoryList");
-  var publishWrap = document.getElementById("saveTemplatePublish");
   var publishBtn = document.getElementById("saveTemplatePublishBtn");
   var unpublishBtn = document.getElementById("saveTemplateUnpublishBtn");
   var publicUrlEl = document.getElementById("saveTemplatePublicUrl");
@@ -82,8 +81,6 @@
     var hasUserTemplate = !!userTemplateId;
     updateBtn.classList.toggle("hidden", !hasUserTemplate);
     historyToggle.classList.toggle("hidden", !hasUserTemplate);
-    publishWrap.classList.toggle("hidden", !hasUserTemplate);
-    if (hasUserTemplate) loadPublishState();
     historyOpen = false;
     historyList.classList.add("hidden");
     historyList.innerHTML = "";
@@ -254,4 +251,11 @@
     }
     submit("/api/user-templates/", "POST", { name: name, state: window.EditorCore.getState() });
   });
+
+  // Publish/unpublish live as their own topbar buttons (not inside the
+  // save modal) — same precondition as Actualizar/Historial (needs a
+  // saved UserTemplate id) but visible without opening anything first.
+  // Both buttons start hidden in the template; renderPublishState (called
+  // by loadPublishState below) reveals whichever one actually applies.
+  if (userTemplateId) loadPublishState();
 })();

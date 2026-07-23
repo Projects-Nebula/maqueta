@@ -25,10 +25,13 @@
         <button class="btn" id="importButton" type="button">↥ Importar JSON</button>
         <button class="btn" id="copyButton" type="button">⧉ Copiar JSON</button>
         <button class="btn success" id="saveTemplateButton" type="button">☆ Guardar</button>
+        <button class="btn success hidden" id="saveTemplatePublishBtn" type="button">Publicar</button>
+        <button class="btn small hidden" id="saveTemplateUnpublishBtn" type="button">Despublicar</button>
         <button class="btn primary" id="downloadButton" type="button">↓ Descargar JSON</button>
         <input class="hidden" id="fileInput" type="file" accept=".json,application/json">
       </div>
     </header>
+    <p id="saveTemplatePublicUrl" class="panel-help hidden" style="margin:0; padding:6px 24px; text-align:right;"></p>
 
     <main class="workspace">
       <div id="editorModalBackdrop" class="editor-modal-backdrop hidden"></div>
@@ -211,12 +214,6 @@
           <button id="saveTemplateHistoryToggle" class="btn small hidden" type="button">Historial ▾</button>
         </div>
         <div id="saveTemplateHistoryList" class="ai-history-list hidden"></div>
-
-        <div id="saveTemplatePublish" class="hidden" style="margin-top:12px">
-          <button id="saveTemplatePublishBtn" class="btn success" type="button">Publicar</button>
-          <button id="saveTemplateUnpublishBtn" class="btn small hidden" type="button">Despublicar</button>
-          <p id="saveTemplatePublicUrl" class="panel-help hidden"></p>
-        </div>
 
         <label class="field">
           <span>Nombre del nuevo template</span>
