@@ -101,3 +101,35 @@ def test_product_id_attribute_rejects_non_digit():
                 "value": "42; DROP TABLE products",
             }
         )
+
+
+def test_iframe_with_youtube_embed_src_accepted():
+    node = {
+        "type": "element",
+        "tag": "iframe",
+        "attributes": {"src": "https://www.youtube.com/embed/kAoSM_p3G5U"},
+        "children": [],
+    }
+    assert _ok({"action": "add_node", "parent_path": [0], "index": 0, "node": node})
+
+
+def test_iframe_with_watch_url_rejected():
+    node = {
+        "type": "element",
+        "tag": "iframe",
+        "attributes": {"src": "https://www.youtube.com/watch?v=kAoSM_p3G5U"},
+        "children": [],
+    }
+    with pytest.raises(OperationValidationError):
+        _ok({"action": "add_node", "parent_path": [0], "index": 0, "node": node})
+
+
+def test_iframe_with_arbitrary_src_rejected():
+    node = {
+        "type": "element",
+        "tag": "iframe",
+        "attributes": {"src": "https://evil.example.com/phish"},
+        "children": [],
+    }
+    with pytest.raises(OperationValidationError):
+        _ok({"action": "add_node", "parent_path": [0], "index": 0, "node": node})

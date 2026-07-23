@@ -11,8 +11,18 @@ import re
 
 TAG_RE = re.compile(r"^[a-z][a-z0-9-]*$")
 
-FORBIDDEN_TAGS = {"script", "iframe", "object", "embed", "applet", "base"}
+FORBIDDEN_TAGS = {"script", "object", "embed", "applet", "base"}
 FORBIDDEN_ATTRS = {"srcdoc", "nonce", "integrity"}
+
+# iframe is otherwise forbidden (arbitrary iframe src on a publicly published
+# page is a clickjacking/phishing vector), but video embeds are a legitimate,
+# common request — allow iframe only with a src on one of these known video
+# providers' embed paths.
+IFRAME_SRC_ALLOWED_PREFIXES = (
+    "https://www.youtube.com/embed/",
+    "https://www.youtube-nocookie.com/embed/",
+    "https://player.vimeo.com/video/",
+)
 
 # Attributes whose value is a URL and therefore needs scheme checking.
 URL_ATTRS = {"href", "src", "action", "formaction", "poster", "cite", "background"}
@@ -291,7 +301,13 @@ def sanitize_node(node, *, _depth=0, _counter=None) -> None:
     if tag in FORBIDDEN_TAGS:
         raise SanitizationError(f"tag not allowed: {tag}")
 
-    check_attributes(node.get("attributes", {}) or {})
+    attributes = node.get("attributes", {}) or {}
+    if tag == "iframe":
+        src = str(attributes.get("src", ""))
+        if not src.startswith(IFRAME_SRC_ALLOWED_PREFIXES):
+            raise SanitizationError(f"iframe src not allowed: {src}")
+
+    check_attributes(attributes)
 
     children = node.get("children", [])
     if children and not isinstance(children, list):

@@ -93,8 +93,16 @@ Reglas estrictas:
   colores de marca. Nunca dejes una sección nueva sin estilizar.
 - Un "node" nuevo sigue el formato {"type":"element","tag":"...","attributes":{},
   "children":[...]} o {"type":"text","value":"..."}.
-- Nunca insertes <script>, <iframe>, <object>, <embed>, atributos on*, srcdoc,
-  ni URLs javascript:/data:text/html.
+- Nunca insertes <script>, <object>, <embed>, atributos on*, srcdoc, ni URLs
+  javascript:/data:text/html. La única excepción es <iframe> para embeber un
+  video de YouTube o Vimeo: usá EXCLUSIVAMENTE la URL de embed, nunca la de
+  "watch" — convertí "https://www.youtube.com/watch?v=XXXX" a
+  "https://www.youtube.com/embed/XXXX" (o el id de Vimeo a
+  "https://player.vimeo.com/video/ID"). Cualquier otro src de iframe será
+  rechazado. Para el aspect-ratio 16:9 del video NUNCA uses un valor arbitrario
+  tipo pb-[56.25%] (no está permitido) — envolvé el <iframe> en un div con
+  clases "relative aspect-video" y dale al <iframe> las clases
+  "absolute inset-0 w-full h-full".
 - No inventes rutas fuera del contexto entregado. Conserva el idioma de la
   página y su consistencia visual. Haz el mínimo cambio necesario.
 - Las operaciones se aplican EN ORDEN, una tras otra, sobre el mismo árbol —
@@ -230,9 +238,12 @@ Reglas estrictas:
   tal cual viene, nunca inventes una URL de imagen. Si "available_images"
   viene vacío o ninguna encaja, no uses <img>.
 - Un nodo es {"type":"element","tag":"...","attributes":{},"children":[...]}
-  o {"type":"text","value":"..."}. Nunca insertes <script>, <iframe>,
-  <object>, <embed>, atributos on*, srcdoc, ni URLs javascript:/data:text/html.
-  NUNCA uses el atributo "style" inline.
+  o {"type":"text","value":"..."}. Nunca insertes <script>, <object>, <embed>,
+  atributos on*, srcdoc, ni URLs javascript:/data:text/html. La única
+  excepción es <iframe> para embeber un video de YouTube o Vimeo: usá
+  EXCLUSIVAMENTE la URL de embed (https://www.youtube.com/embed/ID o
+  https://player.vimeo.com/video/ID), nunca la de "watch". NUNCA uses el
+  atributo "style" inline.
 - Dale a CADA elemento visual relevante clases utilitarias de Tailwind en
   "attributes.class" — layout (flex/grid, flex-col/flex-row, justify-*,
   items-*, gap-*), espaciado (p-*/px-*/py-*/m-*), tamaño (w-*/h-*/max-w-*),
