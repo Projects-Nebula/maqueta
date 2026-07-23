@@ -2851,50 +2851,11 @@ ${body}
       });
 
       // --- Product cards (FEATURE.md) --------------------------------------
-      // "Insertar producto" builds a node referencing one of the owner's own
-      // products. data-product-id/data-buy-form and the form's real "action"
-      // URL are written literally at insert time (not resolved at render
-      // time) — same "literal values at insert time" choice already used
-      // for uploaded images (their <img src> is a literal URL too).
-      function productCardNode(product) {
-        const priceLabel = "$" + (product.price_cents / 100).toFixed(2);
-        const children = [
-          createTextElement("h3", product.name),
-          createTextElement("p", priceLabel)
-        ];
-        if (product.image_url) {
-          children.push({
-            type: "element",
-            tag: "img",
-            attributes: { src: product.image_url, alt: product.name },
-            children: []
-          });
-        }
-        children.push({
-          type: "element",
-          tag: "form",
-          attributes: {
-            "data-buy-form": String(product.id),
-            action: "/comprar/" + product.id + "/",
-            method: "post"
-          },
-          children: [
-            {
-              type: "element",
-              tag: "button",
-              attributes: { type: "submit" },
-              children: [{ type: "text", value: "Comprar" }]
-            }
-          ]
-        });
-        return {
-          type: "element",
-          tag: "div",
-          attributes: { class: ["product-card"], "data-product-id": String(product.id) },
-          children
-        };
-      }
-
+      // "Insertar producto" asks the AI to design and insert the card (see
+      // editor-ai.js's EditorAI.requestInstruction) instead of pushing a
+      // hardcoded node — the server feeds the model the real
+      // id/name/price/image for this owner's active products
+      // (available_products in EditorContext) so it never invents one.
       const productSelect = document.getElementById("productPresetSelect");
       const insertProductButton = document.getElementById("insertProductButton");
       let loadedProducts = [];
@@ -2918,11 +2879,14 @@ ${body}
             showToast("Elegí un producto para insertar.");
             return;
           }
-          state.document.body.children.push(productCardNode(product));
-          selectedPath = [state.document.body.children.length - 1];
-          updateAll();
-          setActiveTab("structure");
-          showToast("Producto agregado.");
+          if (!window.EditorAI) {
+            showToast("El asistente de IA no está disponible.");
+            return;
+          }
+          window.EditorAI.requestInstruction(
+            `Agregá una tarjeta de producto bien diseñada para "${product.name}" ` +
+            `(id ${product.id}) con su botón de compra, al final del contenido principal.`
+          );
         });
       }
 

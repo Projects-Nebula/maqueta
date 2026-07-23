@@ -10,6 +10,8 @@ from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 
+from apps.storefront.models import Product
+
 from .operations import OperationValidationError
 from .providers import AIProviderError, AIProviderTimeout
 from .serializers import TransformRequestSerializer
@@ -50,6 +52,19 @@ class EditorTransformView(APIView):
             )
         data = serializer.validated_data
 
+        # Populated server-side from the requesting user's own products —
+        # never trust a client-supplied product list, since the model would
+        # otherwise have no way to tell a real id from a made-up one.
+        available_products = [
+            {
+                "id": product.id,
+                "name": product.name,
+                "price_cents": product.price_cents,
+                "image_url": product.image.file.url if product.image else None,
+            }
+            for product in Product.objects.filter(owner=request.user, is_active=True)
+        ]
+
         context = EditorContext(
             instruction=data["instruction"],
             selected_path=data.get("selected_path"),
@@ -61,6 +76,7 @@ class EditorTransformView(APIView):
             body_outline=data.get("body_outline", []),
             global_mode=data.get("global_mode", False),
             history=data.get("history", []),
+            available_products=available_products,
         )
         user_id = request.user.pk
         scope = self.throttle_scope

@@ -663,6 +663,20 @@
 
   els.send.addEventListener("click", sendMessage);
 
+  // Programmatic entry point for other editor controls (e.g. "Insertar
+  // producto") that want the AI to design/insert something instead of a
+  // hardcoded template — always global_mode since there's no relevant
+  // selected element for these.
+  global.EditorAI = {
+    requestInstruction(instructionText) {
+      openDrawer();
+      els.globalMode.checked = true;
+      updateContextChip();
+      els.input.value = instructionText;
+      sendMessage();
+    },
+  };
+
   els.input.addEventListener("keydown", (event) => {
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
