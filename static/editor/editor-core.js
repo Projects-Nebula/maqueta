@@ -2838,6 +2838,82 @@ ${body}
         });
       });
 
+      // --- Product cards (FEATURE.md) --------------------------------------
+      // "Insertar producto" builds a node referencing one of the owner's own
+      // products. data-product-id/data-buy-form and the form's real "action"
+      // URL are written literally at insert time (not resolved at render
+      // time) — same "literal values at insert time" choice already used
+      // for uploaded images (their <img src> is a literal URL too).
+      function productCardNode(product) {
+        const priceLabel = "$" + (product.price_cents / 100).toFixed(2);
+        const children = [
+          createTextElement("h3", product.name),
+          createTextElement("p", priceLabel)
+        ];
+        if (product.image_url) {
+          children.push({
+            type: "element",
+            tag: "img",
+            attributes: { src: product.image_url, alt: product.name },
+            children: []
+          });
+        }
+        children.push({
+          type: "element",
+          tag: "form",
+          attributes: {
+            "data-buy-form": String(product.id),
+            action: "/comprar/" + product.id + "/",
+            method: "post"
+          },
+          children: [
+            {
+              type: "element",
+              tag: "button",
+              attributes: { type: "submit" },
+              children: [{ type: "text", value: "Comprar" }]
+            }
+          ]
+        });
+        return {
+          type: "element",
+          tag: "div",
+          attributes: { class: ["product-card"], "data-product-id": String(product.id) },
+          children
+        };
+      }
+
+      const productSelect = document.getElementById("productPresetSelect");
+      const insertProductButton = document.getElementById("insertProductButton");
+      let loadedProducts = [];
+
+      if (productSelect && insertProductButton) {
+        fetch("/api/products/", { credentials: "same-origin" })
+          .then(response => (response.ok ? response.json() : []))
+          .then(products => {
+            loadedProducts = products.filter(p => p.is_active);
+            productSelect.innerHTML = loadedProducts.length
+              ? loadedProducts.map(p => `<option value="${p.id}">${p.name}</option>`).join("")
+              : '<option value="">Sin productos activos</option>';
+          })
+          .catch(() => {
+            productSelect.innerHTML = '<option value="">No se pudieron cargar los productos</option>';
+          });
+
+        insertProductButton.addEventListener("click", () => {
+          const product = loadedProducts.find(p => String(p.id) === productSelect.value);
+          if (!product) {
+            showToast("Elegí un producto para insertar.");
+            return;
+          }
+          state.document.body.children.push(productCardNode(product));
+          selectedPath = [state.document.body.children.length - 1];
+          updateAll();
+          setActiveTab("structure");
+          showToast("Producto agregado.");
+        });
+      }
+
       function downloadFile(filename, content, mime) {
         const blob = new Blob([content], { type: mime });
         const url = URL.createObjectURL(blob);

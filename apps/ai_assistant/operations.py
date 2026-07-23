@@ -73,6 +73,8 @@ def _validate_class_or_text(attribute, value):
         _require(isinstance(value, str), f"{attribute} value must be a string")
         if attribute in URL_ATTRS:
             check_url_value(value)
+        if attribute in ("data-product-id", "data-buy-form"):
+            _require(value.isdigit(), f"{attribute} must be a digit string")
 
 
 def _validate_one(op):

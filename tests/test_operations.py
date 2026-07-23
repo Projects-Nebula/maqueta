@@ -78,3 +78,26 @@ def test_too_many_operations_rejected():
     ops = [{"action": "set_text", "path": [0], "value": "x"}] * 21
     with pytest.raises(OperationValidationError):
         validate_operations(ops, max_operations=20)
+
+
+def test_product_id_attribute_accepts_digit_string():
+    assert _ok(
+        {
+            "action": "set_attribute",
+            "path": [0],
+            "attribute": "data-product-id",
+            "value": "42",
+        }
+    )
+
+
+def test_product_id_attribute_rejects_non_digit():
+    with pytest.raises(OperationValidationError):
+        _ok(
+            {
+                "action": "set_attribute",
+                "path": [0],
+                "attribute": "data-product-id",
+                "value": "42; DROP TABLE products",
+            }
+        )

@@ -287,3 +287,30 @@ def test_too_many_media_queries_rejected():
     ]
     with pytest.raises(DocumentValidationError):
         sanitize_document(doc)
+
+
+def test_product_card_node_with_valid_id_passes():
+    doc = copy.deepcopy(VALID_DOCUMENT)
+    doc["document"]["body"]["children"].append(
+        {
+            "type": "element",
+            "tag": "div",
+            "attributes": {"class": ["flex"], "data-product-id": "42"},
+            "children": [],
+        }
+    )
+    sanitize_document(doc)
+
+
+def test_product_card_node_with_non_digit_id_rejected():
+    doc = copy.deepcopy(VALID_DOCUMENT)
+    doc["document"]["body"]["children"].append(
+        {
+            "type": "element",
+            "tag": "div",
+            "attributes": {"class": ["flex"], "data-product-id": "42; DROP TABLE products"},
+            "children": [],
+        }
+    )
+    with pytest.raises(DocumentValidationError):
+        sanitize_document(doc)
