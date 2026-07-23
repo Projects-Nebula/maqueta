@@ -10,8 +10,7 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 
 - **Tailwind CSS migration.** Styling moved from a custom JSON DSL
   (`styles.rules`: AI/editor-authored `{selector, declarations}` objects) to
-  Tailwind utility classes on each node's `attributes.class`. Full plan and
-  rationale in `REFACTOR.md`.
+  Tailwind utility classes on each node's `attributes.class`.
   - `apps/ai_assistant/tailwind_classes.py` — the finite Tailwind class
     allowlist (`is_allowed_tailwind_class`/`check_class_list`), the same
     security role `CSS_PROPERTY_ALLOWLIST` played before. Wired into
