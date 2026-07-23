@@ -54,6 +54,21 @@ docker run --rm --network host -v "$PWD":/work -w /work \
 Keep the image tag matched to the installed `@playwright/test` version
 (`npx playwright --version`) — a mismatch fails the browser launch.
 
+## Learnings
+
+Before working on a problem, check `LEARNINGS.md` for a similar past issue.
+
+After solving one, record ONLY learnings that are:
+
+- **reproducible** — a specific trigger and outcome, not a one-off fluke.
+- **verified** — you actually confirmed the fix/cause, not a guess.
+- **useful for future cases** — generalizes beyond the one file/line it
+  happened in.
+
+Never record secrets, tokens, passwords, or other private/sensitive
+information — a learning is a technical fact about the codebase or its
+tools, not a log of what credentials were involved.
+
 ## Conventions
 
 - **Python + dependencies via `uv` only** — never pip/poetry/pipenv.
@@ -102,5 +117,8 @@ stream, not a single JSON blob, when parsing it.
 - `CHANGELOG.md` — what shipped.
 - `BACKLOG.csv` — known limitations and pending work, structured for
   filtering (status/area/category/verification/blocked_by).
+- `LEARNINGS.md` — reproducible, verified technical learnings from past
+  debugging — check before starting, add after solving (see "Learnings"
+  above).
 - `openspec/specs/` / `openspec/changes/` — capability specs and in-flight
   change proposals.
