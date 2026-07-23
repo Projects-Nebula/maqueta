@@ -1,0 +1,78 @@
+{% load static %}<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mis productos</title>
+  <style>
+    :root {
+      --bg: #f5f6fa;
+      --surface: #ffffff;
+      --border: #e2e4ec;
+      --text: #182034;
+      --text-muted: #6b7080;
+      --primary: #5b5ce2;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: Inter, Arial, sans-serif;
+      line-height: 1.5;
+    }
+    .products-header { text-align: center; padding: 56px 24px 32px; }
+    .products-header h1 { margin: 0 0 8px; font-size: 32px; }
+    .products-header p { margin: 0; color: var(--text-muted); font-size: 15px; }
+    .products-header a { display: inline-block; margin-top: 12px; color: var(--text); font-size: 14px; }
+    main { max-width: 720px; margin: 0 auto; padding: 0 24px 64px; }
+    .product-form, .product-row {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 18px;
+      margin-bottom: 16px;
+    }
+    .field { display: block; margin-bottom: 12px; }
+    .field span { display: block; font-size: 13px; font-weight: 700; margin-bottom: 4px; }
+    .control {
+      width: 100%; padding: 9px 11px; border: 1px solid var(--border);
+      border-radius: 8px; font: inherit; font-size: 13px;
+    }
+    .btn {
+      padding: 10px 16px; border: 0; border-radius: 8px; font: inherit;
+      font-weight: 600; cursor: pointer; background: #eef; color: var(--text);
+    }
+    .btn.primary { background: var(--primary); color: #fff; }
+    .btn.danger { background: #fee; color: #b91c1c; }
+    .product-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+    .product-row img { width: 48px; height: 48px; object-fit: cover; border-radius: 8px; }
+    .product-info { flex: 1; }
+    .product-info h3 { margin: 0 0 4px; font-size: 15px; }
+    .product-info p { margin: 0; color: var(--text-muted); font-size: 13px; }
+    .empty-state { text-align: center; color: var(--text-muted); padding: 32px 24px; }
+  </style>
+</head>
+<body>
+  <header class="products-header">
+    <h1>Mis productos</h1>
+    <p>Creá productos para vender en tus páginas publicadas.</p>
+    <a href="{% url 'editor:gallery' %}">Volver a mis templates</a>
+  </header>
+
+  <main>
+    <form class="product-form" id="productForm">
+      <label class="field"><span>Nombre</span><input class="control" id="productName" type="text" required></label>
+      <label class="field"><span>Descripción</span><textarea class="control" id="productDescription"></textarea></label>
+      <label class="field"><span>Precio (en centavos, ej. 1999 = $19.99)</span><input class="control" id="productPrice" type="number" min="1" required></label>
+      <label class="field"><span>Imagen (opcional)</span><input class="control" id="productImage" type="file" accept="image/*"></label>
+      <label class="field"><span>Archivo descargable (PDF/ZIP, opcional)</span><input class="control" id="productFile" type="file" accept=".pdf,.zip"></label>
+      <button class="btn primary" type="submit">Crear producto</button>
+    </form>
+
+    <div id="productList"></div>
+  </main>
+
+  <script src="{% static 'storefront/products.js' %}"></script>
+</body>
+</html>

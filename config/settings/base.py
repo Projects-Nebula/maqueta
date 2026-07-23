@@ -51,6 +51,7 @@ INSTALLED_APPS = [
     "apps.editor",
     "apps.ai_assistant",
     "apps.projects",
+    "apps.storefront",
 ]
 
 MIDDLEWARE = [
