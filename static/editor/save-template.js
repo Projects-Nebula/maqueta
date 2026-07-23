@@ -43,10 +43,17 @@
     unpublishBtn.classList.toggle("hidden", !isPublished);
     if (isPublished && data.public_slug) {
       var url = window.location.origin + "/t/" + data.public_slug + "/";
-      publicUrlEl.textContent = "Publicado: " + url;
+      publicUrlEl.textContent = "Publicado: ";
+      var link = document.createElement("a");
+      link.href = url;
+      link.textContent = url;
+      link.target = "_blank";
+      link.rel = "noopener";
+      publicUrlEl.appendChild(link);
       publicUrlEl.classList.remove("hidden");
     } else {
       publicUrlEl.classList.add("hidden");
+      publicUrlEl.textContent = "";
     }
   }
 
