@@ -196,17 +196,25 @@ class UserTemplateViewSet(viewsets.ModelViewSet):
 
 
 class WizardImageUploadView(APIView):
-    """POST /api/wizard/upload-image/ — resize/re-encode an image for the AI
-    wizard to reference in a generated page (see WizardGenerateRequestSerializer's
-    `assets` field). Never stores the raw upload; always re-encoded via
-    image_processing.process_upload, which also bounds dimensions/size so a
-    heavy upload can't affect any other flow (request timeout, disk, memory).
+    """/api/wizard-images/ — the wizard's re-encoded image uploads.
+
+    GET lists the requesting user's own previously uploaded assets (the
+    editor's "Imagen" picker reuses these, see FEATURE.md-style
+    available_products pattern — owner-scoped, never another user's).
+    POST resizes/re-encodes a new upload. Never stores the raw upload;
+    always re-encoded via image_processing.process_upload, which also
+    bounds dimensions/size so a heavy upload can't affect any other flow
+    (request timeout, disk, memory).
     """
 
     permission_classes = [IsAuthenticated]
     parser_classes = [MultiPartParser]
     throttle_classes = [ScopedRateThrottle]
     throttle_scope = "wizard_upload"
+
+    def get(self, request):
+        assets = request.user.uploaded_assets.order_by("-created_at")[:MAX_UPLOADED_ASSETS_PER_USER]
+        return Response(UploadedAssetSerializer(assets, many=True).data)
 
     def post(self, request):
         upload = request.FILES.get("file")

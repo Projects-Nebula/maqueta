@@ -1660,6 +1660,43 @@ ${body}
           true
         );
 
+        previewDocument.addEventListener(
+          "dblclick",
+          event => {
+            const target = event.target;
+            const editable =
+              target && typeof target.closest === "function"
+                ? target.closest("[data-vjpb-path]")
+                : null;
+
+            if (!editable) return;
+
+            event.preventDefault();
+            event.stopPropagation();
+
+            const path = parsePreviewPath(editable.getAttribute("data-vjpb-path"));
+            if (!path) return;
+
+            if (editable.tagName.toLowerCase() === "img") {
+              openImagePickerModal(path);
+              return;
+            }
+            const buyForm = editable.closest("[data-buy-form]");
+            if (buyForm) {
+              const buyFormPath = parsePreviewPath(buyForm.getAttribute("data-vjpb-path"));
+              if (buyFormPath) {
+                openPaymentLinkModal(buyFormPath);
+                return;
+              }
+            }
+            const tag = editable.tagName.toLowerCase();
+            if (tag === "button" || tag === "a") {
+              openPaymentLinkModal(path);
+            }
+          },
+          true
+        );
+
         highlightSelectedPreviewElement(previewDocument);
       }
 
@@ -2889,6 +2926,148 @@ ${body}
           );
         });
       }
+
+      // --- Double-click shortcuts: link a button to a product, or set an
+      // image's source (saved asset / new upload / URL) --------------------
+      const paymentLinkModal = document.getElementById("paymentLinkModal");
+      const paymentLinkProductSelect = document.getElementById("paymentLinkProductSelect");
+      const paymentLinkConfirmBtn = document.getElementById("paymentLinkConfirmBtn");
+      let paymentLinkTargetPath = null;
+
+      function openPaymentLinkModal(path) {
+        if (!paymentLinkModal || !paymentLinkProductSelect) return;
+        paymentLinkTargetPath = path;
+        paymentLinkProductSelect.innerHTML = loadedProducts.length
+          ? loadedProducts.map(p => `<option value="${p.id}">${p.name}</option>`).join("")
+          : '<option value="">Sin productos activos</option>';
+        if (window.EditorModals) window.EditorModals.open(paymentLinkModal);
+      }
+
+      if (paymentLinkConfirmBtn) {
+        paymentLinkConfirmBtn.addEventListener("click", () => {
+          const product = loadedProducts.find(p => String(p.id) === paymentLinkProductSelect.value);
+          if (!product || !paymentLinkTargetPath) {
+            showToast("Elegí un producto para vincular.");
+            return;
+          }
+          const node = getNode(paymentLinkTargetPath);
+          if (!node) return;
+          if (node.tag === "form") {
+            // Already a buy-form (e.g. an AI-inserted product card) — just retarget it.
+            node.attributes = node.attributes || {};
+            node.attributes["data-buy-form"] = String(product.id);
+            node.attributes.action = "/comprar/" + product.id + "/";
+            node.attributes.method = "post";
+          } else {
+            // A bare <button>/<a> — wrap it in the real buy-form, keeping its
+            // own tag/classes/text as the submit control's look.
+            const info = getParentInfo(paymentLinkTargetPath);
+            if (!info) return;
+            info.children[info.index] = {
+              type: "element",
+              tag: "form",
+              attributes: {
+                "data-buy-form": String(product.id),
+                action: "/comprar/" + product.id + "/",
+                method: "post"
+              },
+              children: [{ ...clone(node), tag: "button", attributes: { ...(node.attributes || {}), type: "submit" } }]
+            };
+          }
+          if (window.EditorModals) window.EditorModals.closeAll();
+          updateAll();
+          showToast("Botón vinculado a " + product.name + ".");
+        });
+      }
+
+      const imagePickerModal = document.getElementById("imagePickerModal");
+      const imagePickerSavedGrid = document.getElementById("imagePickerSavedGrid");
+      const imagePickerUploadInput = document.getElementById("imagePickerUploadInput");
+      const imagePickerUrlInput = document.getElementById("imagePickerUrlInput");
+      const imagePickerUrlConfirmBtn = document.getElementById("imagePickerUrlConfirmBtn");
+      let imagePickerTargetPath = null;
+
+      function setImageOnTarget(url) {
+        const node = getNode(imagePickerTargetPath);
+        if (!node) return;
+        node.attributes = node.attributes || {};
+        node.attributes.src = url;
+        if (window.EditorModals) window.EditorModals.closeAll();
+        updateAll();
+        showToast("Imagen actualizada.");
+      }
+
+      function loadSavedAssetsGrid() {
+        if (!imagePickerSavedGrid) return;
+        imagePickerSavedGrid.innerHTML = "Cargando…";
+        fetch("/api/user-templates/wizard-images/", { credentials: "same-origin" })
+          .then(response => (response.ok ? response.json() : []))
+          .then(assets => {
+            if (!assets.length) {
+              imagePickerSavedGrid.innerHTML = "No tenés imágenes guardadas todavía.";
+              return;
+            }
+            imagePickerSavedGrid.innerHTML = "";
+            assets.forEach(asset => {
+              const thumb = document.createElement("button");
+              thumb.type = "button";
+              thumb.className = "preset";
+              thumb.innerHTML = `<img src="${asset.url}" alt="" style="width:100%;height:64px;object-fit:cover;border-radius:6px;">`;
+              thumb.addEventListener("click", () => setImageOnTarget(asset.url));
+              imagePickerSavedGrid.appendChild(thumb);
+            });
+          })
+          .catch(() => {
+            imagePickerSavedGrid.innerHTML = "No se pudieron cargar tus imágenes.";
+          });
+      }
+
+      function openImagePickerModal(path) {
+        if (!imagePickerModal) return;
+        imagePickerTargetPath = path;
+        loadSavedAssetsGrid();
+        if (window.EditorModals) window.EditorModals.open(imagePickerModal);
+      }
+
+      if (imagePickerUploadInput) {
+        imagePickerUploadInput.addEventListener("change", () => {
+          const file = imagePickerUploadInput.files && imagePickerUploadInput.files[0];
+          if (!file) return;
+          const body = new FormData();
+          body.append("file", file);
+          fetch("/api/user-templates/wizard-images/", {
+            method: "POST",
+            credentials: "same-origin",
+            headers: { "X-CSRFToken": (document.cookie.match(/(?:^|;\s*)csrftoken=([^;]+)/) || [])[1] || "" },
+            body
+          })
+            .then(response => (response.ok ? response.json() : Promise.reject()))
+            .then(asset => setImageOnTarget(asset.url))
+            .catch(() => showToast("No se pudo subir la imagen."))
+            .finally(() => { imagePickerUploadInput.value = ""; });
+        });
+      }
+
+      if (imagePickerUrlConfirmBtn) {
+        imagePickerUrlConfirmBtn.addEventListener("click", () => {
+          const url = imagePickerUrlInput.value.trim();
+          if (!url) {
+            showToast("Pegá una URL de imagen.");
+            return;
+          }
+          setImageOnTarget(url);
+          imagePickerUrlInput.value = "";
+        });
+      }
+
+      document.querySelectorAll("[data-image-tab]").forEach(btn => {
+        btn.addEventListener("click", () => {
+          document.querySelectorAll("[data-image-tab]").forEach(b => b.classList.toggle("active", b === btn));
+          document.querySelectorAll("[data-image-panel]").forEach(panel => {
+            panel.classList.toggle("active", panel.dataset.imagePanel === btn.dataset.imageTab);
+          });
+        });
+      });
 
       function downloadFile(filename, content, mime) {
         const blob = new Blob([content], { type: mime });

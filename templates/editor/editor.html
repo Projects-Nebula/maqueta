@@ -206,6 +206,37 @@
         </section>
       </section>
 
+      <section class="panel-modal ai-save-modal hidden" id="paymentLinkModal" role="dialog" aria-modal="true" aria-label="Vincular producto">
+        <button id="paymentLinkModalClose" class="editor-modal-close" type="button" aria-label="Cerrar">×</button>
+        <h2 class="panel-title">Vincular producto</h2>
+        <p class="panel-help">Elegí a qué producto debe apuntar este botón (creá productos en <a href="/productos/" target="_blank" rel="noopener">Mis productos</a>).</p>
+        <select class="control" id="paymentLinkProductSelect"></select>
+        <button class="btn success" id="paymentLinkConfirmBtn" type="button">Vincular</button>
+      </section>
+
+      <section class="panel-modal ai-save-modal hidden" id="imagePickerModal" role="dialog" aria-modal="true" aria-label="Elegir imagen">
+        <button id="imagePickerModalClose" class="editor-modal-close" type="button" aria-label="Cerrar">×</button>
+        <h2 class="panel-title">Imagen</h2>
+        <nav class="tabs" aria-label="Origen de la imagen">
+          <button class="tab active" data-image-tab="saved" type="button">Guardadas</button>
+          <button class="tab" data-image-tab="upload" type="button">Subir</button>
+          <button class="tab" data-image-tab="url" type="button">URL</button>
+        </nav>
+        <div class="tab-panel active" data-image-panel="saved">
+          <div class="preset-grid" id="imagePickerSavedGrid"></div>
+        </div>
+        <div class="tab-panel" data-image-panel="upload">
+          <input class="control" id="imagePickerUploadInput" type="file" accept="image/png,image/jpeg,image/webp">
+        </div>
+        <div class="tab-panel" data-image-panel="url">
+          <label class="field">
+            <span>URL de la imagen</span>
+            <input class="control" id="imagePickerUrlInput" type="text" placeholder="https://...">
+          </label>
+          <button class="btn success" id="imagePickerUrlConfirmBtn" type="button">Usar esta URL</button>
+        </div>
+      </section>
+
       <section class="panel-modal ai-save-modal hidden" id="saveTemplateModal" role="dialog" aria-modal="true" aria-label="Guardar template">
         <button id="saveTemplateModalClose" class="editor-modal-close" type="button" aria-label="Cerrar">×</button>
         <h2 class="panel-title">Guardar template</h2>

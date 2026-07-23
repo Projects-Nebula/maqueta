@@ -769,12 +769,17 @@
   // tabs, opened from the preview toolbar's section-open buttons).
   const elementModal = document.getElementById("elementModal");
   const sectionModal = document.getElementById("sectionModal");
+  const paymentLinkModal = document.getElementById("paymentLinkModal");
+  const imagePickerModal = document.getElementById("imagePickerModal");
   const editorBackdrop = document.getElementById("editorModalBackdrop");
   function closeAllModals() {
     if (elementModal) elementModal.classList.add("hidden");
     if (sectionModal) sectionModal.classList.add("hidden");
+    if (paymentLinkModal) paymentLinkModal.classList.add("hidden");
+    if (imagePickerModal) imagePickerModal.classList.add("hidden");
     if (editorBackdrop) editorBackdrop.classList.add("hidden");
   }
+  global.EditorModals = { closeAll: closeAllModals, open: openModal };
   function openModal(el) {
     closeAllModals();
     if (el) el.classList.remove("hidden");
@@ -791,6 +796,10 @@
   if (editorClose) editorClose.addEventListener("click", closeAllModals);
   const sectionClose = document.getElementById("sectionModalClose");
   if (sectionClose) sectionClose.addEventListener("click", closeAllModals);
+  const paymentLinkClose = document.getElementById("paymentLinkModalClose");
+  if (paymentLinkClose) paymentLinkClose.addEventListener("click", closeAllModals);
+  const imagePickerClose = document.getElementById("imagePickerModalClose");
+  if (imagePickerClose) imagePickerClose.addEventListener("click", closeAllModals);
   if (editorBackdrop) editorBackdrop.addEventListener("click", closeAllModals);
   document.querySelectorAll(".section-open").forEach((btn) => {
     btn.addEventListener("click", () => {
