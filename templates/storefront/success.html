@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gracias por tu compra</title>
+  <style>
+    body { font-family: system-ui, sans-serif; background: #f5f6fb; margin: 0;
+           display: grid; place-items: center; min-height: 100vh; }
+    .card { background: #fff; padding: 32px; border-radius: 16px; width: 360px;
+            text-align: center; box-shadow: 0 10px 40px rgba(30, 30, 80, .08); }
+    h1 { font-size: 20px; margin: 0 0 12px; }
+    p { color: #6b7094; font-size: 14px; }
+    a.btn { display: inline-block; margin-top: 16px; padding: 11px 20px; border-radius: 8px;
+            background: #5b5ce2; color: #fff; text-decoration: none; font-weight: 600; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    {% if pending %}
+      <h1>Procesando tu pago…</h1>
+      <p>Todavía estamos confirmando tu pago. Actualizá esta página en unos segundos.</p>
+    {% else %}
+      <h1>¡Gracias por tu compra!</h1>
+      {% if download_url %}
+        <p>Tu archivo ya está listo.</p>
+        <a class="btn" href="{{ download_url }}">Descargar</a>
+      {% else %}
+        <p>Tu compra se registró correctamente.</p>
+      {% endif %}
+    {% endif %}
+  </div>
+</body>
+</html>

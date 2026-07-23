@@ -16,6 +16,7 @@ dependencies = [
     "anthropic>=0.117.1",
     "json-repair>=0.61.7",
     "pillow>=12.3.0",
+    "stripe>=15.3.1",
 ]
 
 [dependency-groups]

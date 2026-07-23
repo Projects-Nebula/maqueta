@@ -27,6 +27,9 @@ env = environ.Env(
     # large-JSON task. See WizardAIService.
     OPENCODE_ZEN_CHAT_MODEL=(str, "mimo-v2.5"),
     OPENCODE_ZEN_BASE_URL=(str, "https://opencode.ai/zen/go/v1"),
+    STRIPE_SECRET_KEY=(str, ""),
+    STRIPE_WEBHOOK_SECRET=(str, ""),
+    DEFAULT_CURRENCY=(str, "usd"),
 )
 
 # Read .env when present (development). In production, real env vars win.
@@ -160,6 +163,14 @@ OPENCODE_ZEN_CHAT_MODEL = env("OPENCODE_ZEN_CHAT_MODEL")
 OPENCODE_ZEN_BASE_URL = env("OPENCODE_ZEN_BASE_URL")
 # Provider is swappable; fake provider needs no API key (tests, local dev).
 AI_PROVIDER = env("AI_PROVIDER", default="openai" if OPENAI_API_KEY else "fake")
+
+# --- Storefront / payments --------------------------------------------------
+STRIPE_SECRET_KEY = env("STRIPE_SECRET_KEY")
+STRIPE_WEBHOOK_SECRET = env("STRIPE_WEBHOOK_SECRET")
+DEFAULT_CURRENCY = env("DEFAULT_CURRENCY")
+# Same "fake by default, real only with a key" posture as AI_PROVIDER —
+# tests and local dev never touch the real Stripe API.
+PAYMENT_PROVIDER = env("PAYMENT_PROVIDER", default="fake" if not STRIPE_SECRET_KEY else "stripe")
 
 # --- Security headers ------------------------------------------------------
 DATA_UPLOAD_MAX_MEMORY_SIZE = 1024 * 1024  # 1 MB request body cap
