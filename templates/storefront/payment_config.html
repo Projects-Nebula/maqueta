@@ -1,0 +1,80 @@
+{% load static %}<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pasarelas de pago</title>
+  <style>
+    :root {
+      --bg: #f5f6fa;
+      --surface: #ffffff;
+      --border: #e2e4ec;
+      --text: #182034;
+      --text-muted: #6b7080;
+      --primary: #5b5ce2;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: Inter, Arial, sans-serif;
+      line-height: 1.5;
+    }
+    .config-header { text-align: center; padding: 56px 24px 32px; }
+    .config-header h1 { margin: 0 0 8px; font-size: 32px; }
+    .config-header p { margin: 0; color: var(--text-muted); font-size: 15px; }
+    .config-header a { display: inline-block; margin-top: 12px; color: var(--text); font-size: 14px; }
+    main { max-width: 640px; margin: 0 auto; padding: 0 24px 64px; }
+    .gateway-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 18px;
+      margin-bottom: 16px;
+    }
+    .gateway-card-header { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+    .gateway-card-header h2 { margin: 0; font-size: 17px; }
+    .gateway-status { font-size: 12px; font-weight: 700; padding: 3px 8px; border-radius: 999px; }
+    .gateway-status.real { background: #dcfce7; color: #15803d; }
+    .gateway-status.fake { background: #fef3c7; color: #92400e; }
+    .gateway-status.off { background: #f1f2f6; color: var(--text-muted); }
+    .toggle-row { display: flex; align-items: center; gap: 8px; margin: 10px 0; }
+    .credentials-grid { display: none; gap: 10px; margin-top: 10px; }
+    .credentials-grid.open { display: grid; }
+    .field { display: block; margin-bottom: 8px; }
+    .field span { display: block; font-size: 12px; font-weight: 700; margin-bottom: 3px; }
+    .field .hint { font-weight: 400; color: var(--text-muted); font-size: 11px; }
+    .control {
+      width: 100%; padding: 8px 10px; border: 1px solid var(--border);
+      border-radius: 8px; font: inherit; font-size: 13px;
+    }
+    .btn {
+      padding: 8px 14px; border: 0; border-radius: 8px; font: inherit;
+      font-weight: 600; cursor: pointer; background: #eef; color: var(--text); font-size: 13px;
+    }
+    .btn.primary { background: var(--primary); color: #fff; }
+    .warning-banner {
+      background: #fef3c7; color: #92400e; border-radius: 10px; padding: 12px 16px;
+      font-size: 13px; margin-bottom: 20px;
+    }
+  </style>
+</head>
+<body>
+  <header class="config-header">
+    <h1>Pasarelas de pago</h1>
+    <p>Activá las pasarelas que quieras ofrecer a tus compradores y cargá sus credenciales.</p>
+    <a href="{% url 'editor:gallery' %}">Volver a mis templates</a>
+  </header>
+
+  <main>
+    <div class="warning-banner">
+      Una pasarela activada sin credenciales completas funciona en modo de prueba (fake) — no cobra
+      de verdad. Cargá las credenciales reales cuando tengas tu cuenta sandbox/producción lista.
+    </div>
+    <div id="gatewayList"></div>
+  </main>
+
+  <script src="{% static 'storefront/payment-config.js' %}"></script>
+</body>
+</html>

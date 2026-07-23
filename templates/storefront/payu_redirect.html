@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Redirigiendo a PayU…</title>
+</head>
+<body>
+  <p>Redirigiendo a PayU…</p>
+  <form id="payuForm" method="post"
+        action="https://sandbox.checkout.payulatam.com/ppp-web-gateway-payu/">
+    {% for name, value in fields.items %}
+      <input type="hidden" name="{{ name }}" value="{{ value }}">
+    {% endfor %}
+  </form>
+  <script>document.getElementById("payuForm").submit();</script>
+</body>
+</html>
