@@ -123,10 +123,19 @@ After solving a problem:
   `openspec/project.md` gotchas before touching it.
 - **Never trust client-supplied money amounts.** The checkout view
   (`apps/storefront`) always re-reads `Product.price_cents` from the DB —
-  never a price/currency from the request. An `Order` is created by the
-  signature-verified Stripe webhook for real payments; the fake-provider
-  dev/test path is a deliberate, narrow exception — see
-  `openspec/project.md`'s gotchas before changing either path.
+  never a price/currency from the request, regardless of which of the 8
+  gateways (Stripe/Mercado Pago/PayPal/Braintree/Wompi/PayU/ePayco/Bold) is
+  used. An `Order` is created by that gateway's signature-verified webhook
+  for real payments; the fake-provider dev/test path and the zero-gateway
+  free-delivery path are deliberate, narrow exceptions — see
+  `openspec/project.md`'s gotchas and `openspec/specs/storefront/spec.md`
+  before changing any of these paths.
+- **Payment gateway credentials are per-seller, not global.** Configured at
+  `/config/` (`PaymentGatewayConfig`, encrypted at rest via
+  `apps/storefront/crypto.py`) — never add a project-wide `PAYMENT_PROVIDER`
+  setting back; that pattern was deliberately replaced this session because
+  this is a multi-tenant editor (each seller has their own gateway
+  accounts, same as `/productos/` is already owner-scoped).
 
 ## Testing AI-backed endpoints manually
 

@@ -52,20 +52,27 @@ apps/ai_assistant  sanitize · operations · providers (Anthropic/OpenAI-compati
                    · wizard_views · document_validation (sanitizes a FULL
                    generated document, strict key checks at every level) · sse
 apps/projects      Project + ProjectRevision API (owner-scoped)
-apps/storefront    Product · Order models; ProductViewSet (owner-scoped);
-                   /comprar/<id>/, /webhooks/stripe/, /gracias/, /descargas/<token>/
-                   (all anonymous-facing); payments.py (PaymentProvider/
-                   FakePaymentProvider/StripePaymentProvider, same swappable
-                   pattern as apps.ai_assistant.providers)
+apps/storefront    Product · Order (gateway-scoped) · PaymentGatewayConfig
+                   (owner-scoped, encrypted credentials) models; ProductViewSet
+                   + PaymentGatewayConfigViewSet (both owner-scoped);
+                   /comprar/<id>/<gateway>/ (+ legacy /comprar/<id>/),
+                   /webhooks/<gateway>/ (8 of them), /gracias/, /config/,
+                   /descargas/<token>/ (all anonymous-facing except /config/);
+                   payments.py (PaymentProvider ABC, one real + one Fake*
+                   per gateway behind GATEWAY_REGISTRY — Stripe/Mercado
+                   Pago/PayPal/Braintree/Wompi/PayU/ePayco/Bold — same
+                   swappable pattern as apps.ai_assistant.providers);
+                   crypto.py (Fernet encryption for stored credentials)
 templates/         registration/login · editor/editor.html · editor/home.html ·
                    editor/gallery.html · editor/template_wizard.html ·
-                   storefront/products.html · storefront/success.html ·
-                   storefront/checkout_cancel.html
+                   storefront/products.html · storefront/payment_config.html ·
+                   storefront/success.html · storefront/checkout_cancel.html ·
+                   storefront/payu_redirect.html
 static/editor/     editor.css · editor-core.js · editor-ai.js · seed-loader.js ·
                    save-template.js · wizard.css · template-wizard.js ·
                    autosave.js · tailwind-input.css (source) ·
                    tailwind.css (compiled, gitignored, `npm run build:css`)
-static/storefront/ products.js (owner's /productos/ management page)
+static/storefront/ products.js (/productos/) · payment-config.js (/config/)
 tests/             pytest + tests/js/apply.test.js (Node) + tests/e2e/ (Playwright)
 openspec/          this spec set (project.md · specs/ · changes/)
 ```
@@ -202,40 +209,74 @@ docker compose up --build
 - `AI_MAX_OPERATIONS` (default 150) caps ops per AI response.
 - `AI_PROVIDER` selects the provider; `fake` (default when no key) makes the
   whole flow work offline and is what tests rely on.
-- `PAYMENT_PROVIDER` (apps/storefront) mirrors `AI_PROVIDER`'s posture
-  exactly — `fake` by default, `stripe` only once `STRIPE_SECRET_KEY` is
-  set. Tests must never hit the real Stripe API; use `FakePaymentProvider`.
-- `apps/storefront`'s checkout (`/comprar/<id>/`) and webhook
-  (`/webhooks/stripe/`) views are the only two `@csrf_exempt` views in the
-  project — an anonymous buyer and Stripe itself have no CSRF cookie to
-  present. Do not broaden that exemption elsewhere; the webhook's integrity
-  instead comes from mandatory signature verification
-  (`stripe.Webhook.construct_event`), and the checkout view never trusts a
-  client-supplied price (always re-reads `Product.price_cents` from the DB).
-- An `Order` (`apps/storefront`) is created by the verified webhook for
-  real Stripe checkouts — the checkout-redirect view runs before payment is
-  confirmed, so `GET /gracias/` (the success page) must not assume the
-  `Order` already exists; it falls back to a direct
-  `PaymentProvider.retrieve_session` lookup instead of fabricating a
-  download link. **Exception**: with `FakePaymentProvider` (the default
-  without real Stripe keys) there is no real Stripe server to ever deliver
-  that webhook, so `CheckoutView` calls the shared
-  `_record_order_for_session()` directly right after creating the session
-  — **verified** this was a real, live-reproduced bug (buyer stuck on
-  "Procesando tu pago…" forever) before the fix. Never do this for
-  `StripePaymentProvider` — real payments still require the actual signed
+- **Multi-gateway checkout, per-seller, not a global `PAYMENT_PROVIDER`
+  setting anymore.** The buyer picks the gateway at checkout
+  (`POST /comprar/<id>/<gateway>/`); credentials live in `PaymentGatewayConfig`
+  (owner-scoped like `Product`, one row per seller per gateway, encrypted
+  at rest via `apps/storefront/crypto.py` — Fernet keyed from
+  `DJANGO_SECRET_KEY`, so rotating that key without a migration plan makes
+  every stored credential unreadable) managed at `/config/`. An enabled
+  gateway with no/incomplete credentials silently runs its own `Fake*`
+  provider (`apps/storefront/payments.py`'s `GATEWAY_REGISTRY`) instead of
+  failing — tests must never hit a real gateway API; use the matching
+  `Fake*` class. `STRIPE_SECRET_KEY`/`STRIPE_WEBHOOK_SECRET`/
+  `PAYMENT_PROVIDER` settings no longer exist.
+- `apps/storefront`'s checkout and all 8 gateway webhook views
+  (`/webhooks/<gateway>/`) are the only `@csrf_exempt` views in the project
+  — an anonymous buyer and the gateway itself have no CSRF cookie to
+  present. Do not broaden that exemption elsewhere; each webhook's
+  integrity instead comes from that gateway's own signature verification
+  (`GatewayWebhookView` tries every enabled seller's credentials for that
+  gateway until one verifies — a webhook payload carries no explicit
+  seller identity), and checkout never trusts a client-supplied price
+  (always re-reads `Product.price_cents` from the DB).
+- `Order` (`apps/storefront`) gained a `gateway` field — uniqueness is
+  scoped to `(gateway, gateway_session_id)`, not a single global session id
+  (two gateways could theoretically collide on session-id strings). It's
+  created by the verified webhook for a real gateway — the checkout-
+  redirect view runs before payment is confirmed, so `GET /gracias/` (the
+  success page) must not assume the `Order` already exists; it falls back
+  to a direct `PaymentProvider.retrieve_session` lookup instead of
+  fabricating a download link. **Two narrow exceptions, both verified live
+  bugs before their fixes**: (1) with a `Fake*` provider there is no real
+  gateway server to ever deliver a webhook, so `CheckoutView` calls the
+  shared `_record_order_for_session()` directly right after creating the
+  session (buyer was stuck on "Procesando tu pago…" forever otherwise);
+  (2) when the seller has **zero** gateways enabled at all, `CheckoutView`
+  delivers the product directly and records a real `Order`
+  (`gateway="none"`, `amount_cents=0`, `status=PAID`) rather than 404ing or
+  giving it away untracked. Never take either shortcut for a real
+  configured gateway — real payments still require the actual signed
   webhook.
-- `CheckoutView`/`StripeWebhookView` also set `authentication_classes = []`
-  (not just `permission_classes = [AllowAny]`) — DRF's default
-  `SessionAuthentication` runs its OWN CSRF check independent of
-  `@csrf_exempt` whenever it successfully authenticates a request via
-  session cookie. **Verified**: a logged-in visitor (e.g. the product's own
-  owner testing their "Comprar" button) got a 403 `CSRF Failed` despite the
-  view being explicitly exempt, until `authentication_classes = []` removed
-  the reason to authenticate the requester at all. The `api`/`anon_api`
-  test fixtures use `force_authenticate`, which bypasses this whole
-  pipeline — regression-testing this class of bug needs a real
-  `client.login()` session with `enforce_csrf_checks=True`.
+- **`/comprar/<id>/` (no gateway segment) still exists as a legacy URL** —
+  a buy-form `action` baked into a `UserTemplate`'s saved state from before
+  multi-gateway checkout shipped points there, and it's a LITERAL value in
+  stored JSON that a URLconf change never retroactively updates.
+  **Verified** a real already-published page 404'd after the gateway-
+  segment URL shipped; it now falls back to the seller's first enabled
+  gateway (alphabetical) or the zero-gateway free-delivery path above. Any
+  future URL-shape change for a route whose exact string gets saved into
+  content (not just navigated to) needs the same kind of explicit
+  backward-compat path, not just an updated `URLconf`.
+- `CheckoutView`/every gateway webhook view also set
+  `authentication_classes = []` (not just `permission_classes = [AllowAny]`)
+  — DRF's default `SessionAuthentication` runs its OWN CSRF check
+  independent of `@csrf_exempt` whenever it successfully authenticates a
+  request via session cookie. **Verified**: a logged-in visitor (e.g. the
+  product's own owner testing their "Comprar" button) got a 403
+  `CSRF Failed` despite the view being explicitly exempt, until
+  `authentication_classes = []` removed the reason to authenticate the
+  requester at all. The `api`/`anon_api` test fixtures use
+  `force_authenticate`, which bypasses this whole pipeline — regression-
+  testing this class of bug needs a real `client.login()` session with
+  `enforce_csrf_checks=True`.
+- **`stripe.Webhook.construct_event` returns a `StripeObject`, not a plain
+  dict** — no `.get()`, doesn't match `isinstance(x, dict)`.
+  `StripePaymentProvider.parse_webhook_event` normalizes via
+  `event.to_dict()` before returning. This was a real, previously-latent
+  bug: an `isinstance(dict)` branch silently always took the wrong path for
+  every real (non-fake) Stripe webhook, since only `FakePaymentProvider`
+  had ever been exercised through that code path before this was caught.
 - `GET /t/<slug>/` (public template page) and `GET /descargas/<token>/`
   (digital download) both 404 identically for "doesn't exist" and
   "not allowed" — never let either be distinguishable, so neither an
