@@ -8,6 +8,14 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **AI-designed product cards.** "Insertar producto" used to push a
+  hardcoded, completely unstyled node. It now sends an instruction through
+  the same AI transform pipeline the chat panel uses: the server feeds the
+  model `available_products` (id/name/price/image, populated from the
+  requesting user's own active products — never client-supplied) so it
+  fills in a properly Tailwind-styled card without ever inventing a product
+  id. `editor-ai.js` exposes `EditorAI.requestInstruction` for other editor
+  controls to trigger an AI edit the same way.
 - **Public template publishing + storefront.** A signed-in user can publish
   a `UserTemplate` (`is_published`/`public_slug`, stable once set) — anyone,
   logged in or not, can then open `GET /t/<slug>/` and see it rendered
