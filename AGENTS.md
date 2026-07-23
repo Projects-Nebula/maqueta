@@ -123,8 +123,10 @@ After solving a problem:
   `openspec/project.md` gotchas before touching it.
 - **Never trust client-supplied money amounts.** The checkout view
   (`apps/storefront`) always re-reads `Product.price_cents` from the DB —
-  never a price/currency from the request. An `Order` is created only by
-  the signature-verified Stripe webhook, never by the redirect view.
+  never a price/currency from the request. An `Order` is created by the
+  signature-verified Stripe webhook for real payments; the fake-provider
+  dev/test path is a deliberate, narrow exception — see
+  `openspec/project.md`'s gotchas before changing either path.
 
 ## Testing AI-backed endpoints manually
 

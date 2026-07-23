@@ -212,12 +212,30 @@ docker compose up --build
   instead comes from mandatory signature verification
   (`stripe.Webhook.construct_event`), and the checkout view never trusts a
   client-supplied price (always re-reads `Product.price_cents` from the DB).
-- An `Order` (`apps/storefront`) is created ONLY by the verified webhook,
-  never by the checkout-redirect view (which runs before payment is
-  confirmed) — the webhook fires asynchronously, so `GET /gracias/` (the
-  success page) must not assume the `Order` already exists; it falls back
-  to a direct `PaymentProvider.retrieve_session` lookup instead of
-  fabricating a download link.
+- An `Order` (`apps/storefront`) is created by the verified webhook for
+  real Stripe checkouts — the checkout-redirect view runs before payment is
+  confirmed, so `GET /gracias/` (the success page) must not assume the
+  `Order` already exists; it falls back to a direct
+  `PaymentProvider.retrieve_session` lookup instead of fabricating a
+  download link. **Exception**: with `FakePaymentProvider` (the default
+  without real Stripe keys) there is no real Stripe server to ever deliver
+  that webhook, so `CheckoutView` calls the shared
+  `_record_order_for_session()` directly right after creating the session
+  — **verified** this was a real, live-reproduced bug (buyer stuck on
+  "Procesando tu pago…" forever) before the fix. Never do this for
+  `StripePaymentProvider` — real payments still require the actual signed
+  webhook.
+- `CheckoutView`/`StripeWebhookView` also set `authentication_classes = []`
+  (not just `permission_classes = [AllowAny]`) — DRF's default
+  `SessionAuthentication` runs its OWN CSRF check independent of
+  `@csrf_exempt` whenever it successfully authenticates a request via
+  session cookie. **Verified**: a logged-in visitor (e.g. the product's own
+  owner testing their "Comprar" button) got a 403 `CSRF Failed` despite the
+  view being explicitly exempt, until `authentication_classes = []` removed
+  the reason to authenticate the requester at all. The `api`/`anon_api`
+  test fixtures use `force_authenticate`, which bypasses this whole
+  pipeline — regression-testing this class of bug needs a real
+  `client.login()` session with `enforce_csrf_checks=True`.
 - `GET /t/<slug>/` (public template page) and `GET /descargas/<token>/`
   (digital download) both 404 identically for "doesn't exist" and
   "not allowed" — never let either be distinguishable, so neither an
@@ -274,6 +292,56 @@ docker compose up --build
   deterministic, so a failure doesn't reliably reproduce on retry; the
   reason needs to already be in `server.log` the first time, not require
   flipping the log level and asking for another attempt.
+- **`max-w-*` has its own named container-width scale** (`xs`..`7xl`, `full`,
+  `min`, `max`, `fit`, `prose`, `none`), separate from the numeric spacing
+  scale shared by `w`/`h`/`min-w`/`min-h`/`max-h`
+  (`tailwind_classes.py`'s `MAX_WIDTH_NAMED_SCALE`). **Verified** a real AI
+  generation attempt was rejected for `max-w-4xl` — one of the most common
+  Tailwind classes for a page container — before this was added; a
+  screenshot showing a vague "cambios no válidos" error can have a
+  completely different real cause than it looks like, always check
+  `server.log`'s exact rejection string first.
+- **`<iframe>` embeds (YouTube/Vimeo) need THREE separate places updated
+  together**, or the change silently half-works with no clear error:
+  1. `apps/ai_assistant/sanitize.py`'s `IFRAME_SRC_ALLOWED_PREFIXES` (server
+     validation — arbitrary iframe src stays forbidden, a real
+     clickjacking/phishing risk on now-publicly-published pages).
+  2. `static/editor/editor-core.js`'s `renderNode()` — a SEPARATE,
+     hand-maintained tag/src check for the live preview (this file is
+     intentionally not refactored, see below).
+  3. The CSP `frame-src` directive in BOTH
+     `config/settings/development.py` and `production.py`.
+  Also: `templates/editor/editor.html`'s `#previewFrame` needs
+  `allow-scripts` in its `sandbox` attribute (not just `allow-same-origin`)
+  for a nested video iframe to run its own player JS — sandbox flags
+  cascade to nested browsing contexts. **Verified** all three/four gaps
+  independently, one at a time, via live Playwright reproduction — fixing
+  only one still leaves the embed broken with a different symptom each
+  time (rejected server-side → CSP-blocked → "Unable to execute
+  JavaScript").
+- **`Error 153` on an embedded YouTube video is a `localhost`/`127.0.0.1`
+  origin issue, not a maqueta bug.** Verified via YouTube's own public
+  oEmbed endpoint (`curl
+  "https://www.youtube.com/oembed?url=...&format=json"` → 200 with a valid
+  embed snippet) that the video itself is embeddable; the rejection is
+  YouTube's own origin check. Re-test on a real deployed domain before
+  assuming a regression.
+- **"Insertar producto" and the double-click product-link/image-picker are
+  deliberately different mechanisms**, not an inconsistency: inserting a
+  new product card routes through the AI (`EditorAI.requestInstruction`,
+  server-populated `EditorContext.available_products`, never
+  client-supplied) since it needs to generate a styled layout: linking an
+  existing button or swapping an image is a deterministic client-side edit
+  (`getNode`/`getParentInfo`/`updateAll` in `editor-core.js`, no AI
+  round-trip) since it's wiring, not content generation. Both were
+  explicit, asked-for product decisions — see `BACKLOG.csv` rows 44/45.
+- `static/editor/editor-core.js`'s `sectionPreset()` (Hero/Beneficios/
+  Texto/Imagen/Llamado/Footer quick-insert presets) still uses semantic
+  classes (`.hero`, `.container`, `.feature-grid`, `.cta-box`) from before
+  the Tailwind migration — **no stylesheet in the project defines any of
+  them**, so every one of these presets renders completely unstyled. Known,
+  not yet fixed (`BACKLOG.csv` row 43); found as a side effect of
+  investigating the (now-fixed) unstyled product-card insert.
 
 ## Related durable context
 
