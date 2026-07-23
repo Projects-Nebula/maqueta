@@ -20,6 +20,7 @@ CSP_HEADER = (
     "img-src 'self' data:; "
     "style-src 'self' 'unsafe-inline'; "
     "script-src 'self'; "
-    "frame-src 'self'; "
+    "frame-src 'self' https://www.youtube.com https://www.youtube-nocookie.com "
+    "https://player.vimeo.com; "
     "connect-src 'self'"
 )

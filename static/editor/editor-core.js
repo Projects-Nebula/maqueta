@@ -997,9 +997,21 @@
 
         if (node.type !== "element") return "";
 
-        const forbiddenTags = new Set(["script", "iframe", "object", "embed"]);
+        const forbiddenTags = new Set(["script", "object", "embed"]);
         const tag = /^[a-z][a-z0-9-]*$/i.test(node.tag || "") ? node.tag.toLowerCase() : "div";
         if (forbiddenTags.has(tag)) return "";
+        // iframe is allowed only for a known video-embed src (mirrors
+        // apps/ai_assistant/sanitize.py's IFRAME_SRC_ALLOWED_PREFIXES) —
+        // arbitrary iframe src stays blocked in the preview too.
+        if (tag === "iframe") {
+          const src = String((node.attributes || {}).src || "");
+          const allowedIframeSrcPrefixes = [
+            "https://www.youtube.com/embed/",
+            "https://www.youtube-nocookie.com/embed/",
+            "https://player.vimeo.com/video/"
+          ];
+          if (!allowedIframeSrcPrefixes.some((prefix) => src.startsWith(prefix))) return "";
+        }
 
         const voidTags = new Set(["area", "base", "br", "col", "hr", "img", "input", "link", "meta", "source", "track", "wbr"]);
 
