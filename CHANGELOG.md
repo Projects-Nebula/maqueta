@@ -211,7 +211,10 @@ this project adheres to [Semantic Versioning](https://semver.org/).
   `player.vimeo.com/video/`) so arbitrary iframe embeds (a clickjacking/
   phishing risk on now-publicly-published pages) are still rejected. The AI
   prompt now converts `watch` URLs to `embed` URLs and uses `aspect-video`
-  instead of an arbitrary `pb-[56.25%]` padding hack.
+  instead of an arbitrary `pb-[56.25%]` padding hack. The allowlist alone
+  wasn't enough to make embeds visible: the CSP's `frame-src 'self'` and
+  `editor-core.js`'s own separate client-side tag list both independently
+  blocked the same embed and needed the matching same-origin allowlist.
 - **AI color instructions had no effect on gradient backgrounds.** For an
   element with an opaque `background: linear-gradient(...)`, the model emitted
   `background-color`, which renders *under* the gradient and stays invisible.
