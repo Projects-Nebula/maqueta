@@ -206,6 +206,15 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **Checkout with the fake payment provider got stuck forever on
+  "Procesando tu pago…".** With no real Stripe keys configured (the
+  project's default dev/test posture), `FakePaymentProvider` marks a
+  session paid instantly, but the `Order` was only ever created by
+  `StripeWebhookView` — and nothing in dev/test can ever deliver that
+  webhook. `CheckoutView` now records the order immediately right after
+  creating the session, but only when running against the fake provider;
+  real Stripe checkouts are unaffected and still require the actual
+  signed webhook.
 - **Checkout/webhook rejected logged-in sessions with a CSRF 403.**
   `CheckoutView`/`StripeWebhookView` are `@csrf_exempt` + `AllowAny`, but
   DRF's default `SessionAuthentication` runs its own CSRF check independent
