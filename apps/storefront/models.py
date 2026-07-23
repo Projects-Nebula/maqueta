@@ -58,6 +58,10 @@ class Order(models.Model):
         PAYU = "payu"
         EPAYCO = "epayco"
         BOLD = "bold"
+        # Not a real payment gateway — the seller has none enabled at all.
+        # CheckoutView delivers the product directly and records a $0 Order
+        # (never silently un-tracked) instead of 404ing.
+        NONE = "none"
 
     product = models.ForeignKey(
         Product, on_delete=models.SET_NULL, null=True, related_name="orders"

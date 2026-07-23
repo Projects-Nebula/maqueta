@@ -148,7 +148,34 @@ def test_checkout_legacy_url_without_gateway_falls_back_to_first_enabled(anon_ap
     assert order.gateway == "mercadopago"  # "mercadopago" < "wompi" alphabetically
 
 
-def test_checkout_legacy_url_404s_when_seller_has_nothing_enabled(anon_api, user):
+def test_checkout_delivers_for_free_when_seller_has_no_gateway_enabled(anon_api, user):
+    # No PaymentGatewayConfig at all — rather than 404 a buyer who clicked a
+    # real "Comprar" button, deliver directly and record a real, permanent
+    # $0 Order (never silently untracked).
     product = Product.objects.create(owner=user, name="Ebook", price_cents=1999)
     response = anon_api.post(f"/comprar/{product.id}/")
-    assert response.status_code == 404
+    assert response.status_code == 302
+    assert "gateway=none" in response.headers["Location"]
+    order = Order.objects.get(product=product)
+    assert order.gateway == Order.Gateway.NONE
+    assert order.amount_cents == 0
+    assert order.status == Order.Status.PAID
+
+
+def test_checkout_free_delivery_sets_download_token_for_digital_product(anon_api, user):
+    from django.core.files.base import ContentFile
+
+    product = Product.objects.create(owner=user, name="Ebook", price_cents=1999)
+    product.digital_file.save("book.pdf", ContentFile(b"%PDF-1.4\nfake"), save=True)
+    response = anon_api.post(f"/comprar/{product.id}/")
+    assert response.status_code == 302
+    order = Order.objects.get(product=product)
+    assert order.download_token
+
+
+def test_checkout_free_delivery_reaches_the_thank_you_page(anon_api, user):
+    product = Product.objects.create(owner=user, name="Ebook", price_cents=1999)
+    checkout_response = anon_api.post(f"/comprar/{product.id}/")
+    response = anon_api.get(checkout_response.headers["Location"])
+    assert response.status_code == 200
+    assert b"Gracias" in response.content

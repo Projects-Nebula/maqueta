@@ -1,4 +1,5 @@
 import logging
+import uuid
 
 from django.conf import settings
 from django.contrib.auth.decorators import login_required
@@ -179,7 +180,7 @@ class CheckoutView(APIView):
                 .first()
             )
             if not fallback:
-                raise Http404
+                return self._deliver_for_free(request, product)
             gateway = fallback.gateway
         if gateway not in GATEWAY_REGISTRY:
             raise Http404
@@ -225,6 +226,29 @@ class CheckoutView(APIView):
 
         return HttpResponseRedirect(session.url)
 
+    def _deliver_for_free(self, request, product):
+        """The seller has no gateway enabled at all — deliver the product
+        directly instead of 404ing, but still record a real, permanent
+        Order (amount_cents=0, gateway="none") so a $0 delivery is
+        auditable exactly like a real purchase, never silently untracked."""
+        session_id = f"free_{uuid.uuid4().hex}"
+        order = Order.objects.create(
+            product=product,
+            gateway=Order.Gateway.NONE,
+            gateway_session_id=session_id,
+            amount_cents=0,
+            currency=settings.DEFAULT_CURRENCY,
+            status=Order.Status.PAID,
+        )
+        if product.digital_file:
+            order.download_token = Order.generate_download_token()
+            order.save(update_fields=["download_token"])
+        success_url = (
+            request.build_absolute_uri(reverse("storefront:success"))
+            + f"?gateway={Order.Gateway.NONE}&session_id={session_id}"
+        )
+        return HttpResponseRedirect(success_url)
+
 
 def checkout_cancel_view(request):
     return render(request, "storefront/checkout_cancel.html", {})
@@ -246,7 +270,7 @@ class SuccessView(APIView):
     def get(self, request):
         gateway = request.GET.get("gateway", "")
         session_id = request.GET.get("session_id")
-        if not session_id or gateway not in GATEWAY_REGISTRY:
+        if not session_id or (gateway != Order.Gateway.NONE and gateway not in GATEWAY_REGISTRY):
             raise Http404
 
         order = Order.objects.filter(gateway=gateway, gateway_session_id=session_id).first()
