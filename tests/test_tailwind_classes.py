@@ -45,6 +45,12 @@ def test_rejects_made_up_or_out_of_scale_classes():
         assert not is_allowed_tailwind_class(token), token
 
 
+def test_allows_max_width_named_scale_but_not_on_plain_width():
+    for token in ["max-w-4xl", "max-w-prose", "max-w-screen", "max-w-none", "max-w-4"]:
+        assert is_allowed_tailwind_class(token), token
+    assert not is_allowed_tailwind_class("w-4xl")
+
+
 def test_allows_one_responsive_and_one_state_prefix_combined():
     assert is_allowed_tailwind_class("md:flex-row")
     assert is_allowed_tailwind_class("hover:bg-blue-600")

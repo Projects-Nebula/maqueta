@@ -86,6 +86,29 @@ SIZING_SCALE = SPACING_SCALE | {
     "3/5",
     "4/5",
 }
+# max-w-* (and, less commonly, w-*) also has this named container-width
+# scale, independent of the numeric spacing scale — max-w-4xl is one of the
+# most common Tailwind classes for a page container and was missing here
+# until a real AI generation attempt got rejected for using it.
+MAX_WIDTH_NAMED_SCALE = {
+    "xs",
+    "sm",
+    "md",
+    "lg",
+    "xl",
+    "2xl",
+    "3xl",
+    "4xl",
+    "5xl",
+    "6xl",
+    "7xl",
+    "full",
+    "min",
+    "max",
+    "fit",
+    "prose",
+    "none",
+}
 GRID_SPAN_SCALE = {str(n) for n in range(1, 13)} | {"full", "auto"}
 FONT_SIZE_SCALE = {"xs", "sm", "base", "lg", "xl", "2xl", "3xl", "4xl", "5xl", "6xl", "7xl"}
 FONT_WEIGHT_SCALE = {
@@ -164,7 +187,7 @@ UTILITY_FAMILIES: dict[str, set[str]] = {
     "w": SIZING_SCALE,
     "h": SIZING_SCALE,
     "min-w": SIZING_SCALE,
-    "max-w": SIZING_SCALE,
+    "max-w": SIZING_SCALE | MAX_WIDTH_NAMED_SCALE,
     "min-h": SIZING_SCALE,
     "max-h": SIZING_SCALE,
     "inset": SPACING_SCALE,
