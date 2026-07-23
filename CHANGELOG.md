@@ -8,6 +8,31 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **Multi-gateway checkout: Stripe, Mercado Pago, PayPal, Braintree, Wompi,
+  PayU, ePayco, Bold.** The buyer picks the gateway at checkout — every
+  product card gets one "Pagar con X" button per gateway the seller has
+  enabled, never a single global provider. Credentials are configured per
+  seller (`/config/`, `PaymentGatewayConfig`, owner-scoped like `/productos/`)
+  and encrypted at rest (`apps/storefront/crypto.py`, Fernet keyed from
+  `DJANGO_SECRET_KEY`) — never returned by any API response, even to the
+  owner who set them. Each gateway has a real implementation plus its own
+  `Fake*` variant (`apps/storefront/payments.py`'s `GATEWAY_REGISTRY`); an
+  enabled gateway with no/incomplete credentials silently runs its fake
+  variant instead of failing, so every button "works" in demo/dev without
+  any real keys. `Order` gained a `gateway` field (uniqueness scoped per
+  gateway, not global, since two gateways could theoretically collide on
+  session-id strings); a shared `GatewayWebhookView` base tries every
+  enabled seller's credentials for a gateway until one verifies the inbound
+  signature, since a webhook payload carries no explicit seller identity.
+  Confidence varies by gateway — Stripe/Mercado Pago/Wompi/PayU/ePayco
+  verification was checked against each platform's own docs and is
+  regression-tested locally (pure HMAC/checksum, no network); PayPal's
+  verification is a real server-to-server API call (mocked in tests);
+  Braintree's own SDK verifies its webhooks directly; Bold's real webhook
+  spec could never be confirmed (its docs are JS-rendered and returned no
+  usable content) so `BoldPaymentProvider.parse_webhook_event` deliberately
+  always raises rather than pretend to verify something unconfirmed — see
+  `openspec/specs/storefront/spec.md` for the full behavioral contract.
 - **AI-designed product cards.** "Insertar producto" used to push a
   hardcoded, completely unstyled node. It now sends an instruction through
   the same AI transform pipeline the chat panel uses: the server feeds the
