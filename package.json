@@ -8,13 +8,16 @@
   },
   "scripts": {
     "test": "node --test tests/js/**/*.test.js",
-    "test:e2e": "playwright test tests/e2e"
+    "test:e2e": "playwright test tests/e2e",
+    "build:css": "uv run python manage.py generate_tailwind_safelist && tailwindcss -i static/editor/tailwind-input.css -o static/editor/tailwind.css --minify"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "type": "commonjs",
   "devDependencies": {
-    "@playwright/test": "^1.61.1"
+    "@playwright/test": "^1.61.1",
+    "@tailwindcss/cli": "^4.3.3",
+    "tailwindcss": "^4.3.3"
   }
 }
