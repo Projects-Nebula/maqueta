@@ -19,10 +19,12 @@ from rest_framework.views import APIView
 from apps.projects.models import Project
 
 from .image_processing import ImageProcessingError, process_upload
-from .models import Template, UploadedAsset, UserTemplate, UserTemplateRevision
+from .models import Template, UploadedAsset, UserPalette, UserTemplate, UserTemplateRevision
+from .palettes import palette_catalog_for_client
 from .rendering import public_page_html
 from .serializers import (
     UploadedAssetSerializer,
+    UserPaletteSerializer,
     UserTemplateRevisionSerializer,
     UserTemplateSerializer,
 )
@@ -83,6 +85,7 @@ def editor_view(request):
             "template_state": state,
             "user_template_id": user_template_id,
             "project_id": project_id,
+            "palette_catalog": palette_catalog_for_client(request.user.user_palettes.all()),
         },
     )
 
@@ -111,7 +114,11 @@ def template_wizard_view(request):
     reasoning — the page's fetch() calls to /api/ai/wizard/* and
     /api/user-templates/ need the csrftoken cookie set.
     """
-    return render(request, "editor/template_wizard.html", {})
+    return render(
+        request,
+        "editor/template_wizard.html",
+        {"palette_catalog": palette_catalog_for_client(request.user.user_palettes.all())},
+    )
 
 
 class PublicTemplateView(APIView):
@@ -136,6 +143,19 @@ class PublicTemplateView(APIView):
             raise Http404
         html = public_page_html(user_template.state, title_fallback=user_template.name)
         return HttpResponse(html)
+
+
+class UserPaletteViewSet(viewsets.ModelViewSet):
+    """CRUD for the current user's reusable palette catalog."""
+
+    serializer_class = UserPaletteSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return UserPalette.objects.filter(owner=self.request.user)
+
+    def perform_create(self, serializer):
+        serializer.save(owner=self.request.user)
 
 
 class UserTemplateViewSet(viewsets.ModelViewSet):

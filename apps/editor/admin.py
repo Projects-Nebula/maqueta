@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import Template, UserTemplate, UserTemplateRevision
+from .models import Template, UserPalette, UserTemplate, UserTemplateRevision
 
 
 @admin.register(Template)
@@ -14,6 +14,12 @@ class TemplateAdmin(admin.ModelAdmin):
 class UserTemplateAdmin(admin.ModelAdmin):
     list_display = ["name", "owner", "updated_at"]
     search_fields = ["name", "owner__username"]
+
+
+@admin.register(UserPalette)
+class UserPaletteAdmin(admin.ModelAdmin):
+    list_display = ["name", "slug", "owner", "updated_at"]
+    search_fields = ["name", "slug", "owner__username"]
 
 
 @admin.register(UserTemplateRevision)

@@ -71,6 +71,36 @@ class UserTemplate(models.Model):
         self.save(update_fields=["is_published", "updated_at"])
 
 
+class UserPalette(models.Model):
+    """A reusable four-role palette owned by one user.
+
+    The palette is a catalog entry, not a second document styling source:
+    applying it copies ``variables`` into a template's ``styles.variables``.
+    ``slug`` remains stable so saved templates can keep safe provenance
+    metadata even if the display name changes later.
+    """
+
+    owner = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="user_palettes"
+    )
+    slug = models.SlugField(max_length=64)
+    name = models.CharField(max_length=80)
+    variables = models.JSONField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["name", "created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["owner", "slug"], name="editor_userpalette_owner_slug_unique"
+            )
+        ]
+
+    def __str__(self):
+        return self.name
+
+
 class UserTemplateRevision(models.Model):
     """Snapshot of a UserTemplate's state before an update overwrote it."""
 

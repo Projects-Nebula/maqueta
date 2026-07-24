@@ -62,6 +62,29 @@ def test_includes_style_rules_and_variables():
     assert "--accent: #123456" in html
 
 
+def test_palette_metadata_does_not_change_rendered_markup():
+    state = _state(
+        children=[{"type": "element", "tag": "div", "attributes": {}, "children": []}],
+        variables={
+            "--color-primary": "#112233",
+            "--color-background": "#f8fafc",
+            "--color-text": "#0f172a",
+            "--color-surface": "#ffffff",
+        },
+    )
+    state["styles"]["palette"] = {
+        "id": "mi-marca",
+        "name": "Nombre que no se renderiza",
+        "source": "custom",
+    }
+
+    html = thumbnail_srcdoc(state)
+
+    assert ":root {" in html
+    assert "--color-primary: #112233" in html
+    assert "Nombre que no se renderiza" not in html
+
+
 def test_includes_compiled_tailwind_css_link():
     state = _state(children=[{"type": "element", "tag": "div", "attributes": {}, "children": []}])
     html = thumbnail_srcdoc(state)

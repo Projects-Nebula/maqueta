@@ -42,3 +42,38 @@ def test_revision_history_is_capped_at_retention_limit(api, user):
     versions = sorted(r["version"] for r in resp.data)
     assert versions[0] == 6
     assert versions[-1] == REVISION_RETENTION_LIMIT + 5
+
+
+def test_template_save_rejects_invalid_palette_metadata(api, user):
+    ut = UserTemplate.objects.create(owner=user, name="T", state=_state(0))
+    invalid = _state(1)
+    invalid["styles"] = {
+        "palette": {"id": "custom", "name": "Mi paleta", "source": "custom"},
+        "variables": {"--color-primary": "#fff"},
+    }
+    response = api.patch(f"{URL}{ut.id}/", {"state": invalid}, format="json")
+    assert response.status_code == 400
+
+
+def test_valid_custom_palette_survives_save_and_reload(api, user):
+    ut = UserTemplate.objects.create(owner=user, name="T", state=_state(0))
+    custom = _state(1)
+    custom["styles"] = {
+        "palette": {"id": "mi-marca", "name": "Mi marca", "source": "custom"},
+        "variables": {
+            "--color-primary": "#112233",
+            "--color-background": "#f8fafc",
+            "--color-text": "#0f172a",
+            "--color-surface": "#ffffff",
+        },
+        "rules": [],
+        "keyframes": [],
+    }
+
+    saved = api.patch(f"{URL}{ut.id}/", {"state": custom}, format="json")
+    assert saved.status_code == 200
+
+    reloaded = api.get(f"{URL}{ut.id}/")
+    assert reloaded.status_code == 200
+    assert reloaded.data["state"]["styles"]["palette"] == custom["styles"]["palette"]
+    assert reloaded.data["state"]["styles"]["variables"] == custom["styles"]["variables"]

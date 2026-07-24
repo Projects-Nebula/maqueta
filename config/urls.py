@@ -19,6 +19,7 @@ urlpatterns = [
     path("api/ai/", include("apps.ai_assistant.urls")),
     path("api/projects/", include("apps.projects.urls")),
     path("api/user-templates/", include("apps.editor.api_urls")),
+    path("api/user-palettes/", include("apps.editor.palette_api_urls")),
     path("", include("apps.storefront.urls")),
     path("api/products/", include("apps.storefront.api_urls")),
     path("api/payment-gateway-configs/", include("apps.storefront.payment_config_api_urls")),
