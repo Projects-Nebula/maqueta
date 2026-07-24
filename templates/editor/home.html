@@ -4,24 +4,18 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Elegí un template</title>
+  <link rel="stylesheet" href="{% static 'shared/tokens.css' %}">
+  <link rel="stylesheet" href="{% static 'shared/navigation.css' %}">
   <style>
-    :root {
-      --bg: #f5f6fa;
-      --surface: #ffffff;
-      --border: #e2e4ec;
-      --text: #182034;
-      --text-muted: #6b7080;
-    }
-
     * {
       box-sizing: border-box;
     }
 
     body {
       margin: 0;
-      background: var(--bg);
+      background: var(--app-bg);
       color: var(--text);
-      font-family: Inter, Arial, sans-serif;
+      font-family: var(--font-sans);
       line-height: 1.5;
     }
 
@@ -37,11 +31,11 @@
 
     .gallery-header p {
       margin: 0;
-      color: var(--text-muted);
+      color: var(--muted);
       font-size: 15px;
     }
 
-    .gallery-header a {
+    .gallery-header > a {
       display: inline-block;
       margin-top: 12px;
       color: var(--accent-link, #5b5ce2);
@@ -50,7 +44,7 @@
       text-decoration: none;
     }
 
-    .gallery-header a:hover {
+    .gallery-header > a:hover {
       text-decoration: underline;
     }
 
@@ -74,7 +68,7 @@
       border: 1px solid var(--border);
       border-radius: 14px;
       padding: 18px;
-      background: var(--surface);
+      background: var(--panel-bg);
       font: inherit;
       color: inherit;
       transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
@@ -97,7 +91,7 @@
       font-size: 30px;
       font-weight: 800;
       color: #fff;
-      background: var(--accent, #5b5ce2);
+      background: var(--accent, var(--primary));
       margin-bottom: 14px;
       overflow: hidden;
       position: relative;
@@ -123,8 +117,15 @@
 
     .template-desc {
       margin: 0;
-      color: var(--text-muted);
+      color: var(--muted);
       font-size: 13px;
+    }
+
+    .empty-state {
+      grid-column: 1 / -1;
+      text-align: center;
+      color: var(--muted);
+      padding: 32px 24px;
     }
   </style>
 </head>
@@ -132,6 +133,13 @@
   <header class="gallery-header">
     <h1>Elegí un template</h1>
     <p>Empezá tu página desde un punto de partida y personalizala en el editor.</p>
+    <nav class="site-nav" aria-label="Navegación principal">
+      <a href="{% url 'editor:home' %}" aria-current="page">Templates base</a>
+      <a href="{% url 'editor:gallery' %}">Mis templates</a>
+      <a href="{% url 'analytics:dashboard' %}">Analítica</a>
+      <a href="{% url 'storefront:products' %}">Mis productos</a>
+      <a href="{% url 'storefront:payment-config' %}">Pasarelas de pago</a>
+    </nav>
     <a href="{% url 'editor:template-wizard' %}">✦ Crear mi propio template con IA</a>
   </header>
 
@@ -151,6 +159,9 @@
         <p class="template-desc">{{ t.description }}</p>
       </a>
     {% endfor %}
+    {% if not templates %}
+      <p class="empty-state">No hay templates base disponibles todavía.</p>
+    {% endif %}
   </main>
 </body>
 </html>
