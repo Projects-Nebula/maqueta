@@ -1,22 +1,27 @@
-<!DOCTYPE html>
+{% load static %}<!DOCTYPE html>
 <html lang="es">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Gracias por tu compra</title>
+  <link rel="stylesheet" href="{% static 'shared/tokens.css' %}">
+  {% if pending %}<meta http-equiv="refresh" content="5">{% endif %}
   <style>
-    body { font-family: system-ui, sans-serif; background: #f5f6fb; margin: 0;
-           display: grid; place-items: center; min-height: 100vh; }
-    .card { background: #fff; padding: 32px; border-radius: 16px; width: 360px;
-            text-align: center; box-shadow: 0 10px 40px rgba(30, 30, 80, .08); }
+    * { box-sizing: border-box; }
+    body { font-family: var(--font-sans); color: var(--text); background: var(--app-bg); margin: 0;
+           display: grid; place-items: center; min-height: 100vh; padding: 16px; }
+    .card { background: var(--panel-bg); border: 1px solid var(--border); padding: 32px;
+            border-radius: var(--radius); width: min(360px, 100%); text-align: center; box-shadow: var(--shadow); }
     h1 { font-size: 20px; margin: 0 0 12px; }
-    p { color: #6b7094; font-size: 14px; }
+    p { color: var(--muted); font-size: 14px; }
     a.btn { display: inline-block; margin-top: 16px; padding: 11px 20px; border-radius: 8px;
-            background: #5b5ce2; color: #fff; text-decoration: none; font-weight: 600; }
+            background: var(--primary); color: #fff; text-decoration: none; font-weight: 600; }
+    a.btn.secondary { margin-left: 6px; background: var(--panel-soft); color: var(--text); }
+    .actions { display: flex; justify-content: center; flex-wrap: wrap; gap: 8px; }
   </style>
 </head>
 <body>
-  <div class="card">
+  <main class="card" {% if pending %}role="status" aria-live="polite"{% endif %}>
     {% if pending %}
       <h1>Procesando tu pago…</h1>
       <p>Todavía estamos confirmando tu pago. Actualizá esta página en unos segundos.</p>
@@ -24,11 +29,15 @@
       <h1>¡Gracias por tu compra!</h1>
       {% if download_url %}
         <p>Tu archivo ya está listo.</p>
-        <a class="btn" href="{{ download_url }}">Descargar</a>
+        <div class="actions">
+          <a class="btn" href="{{ download_url }}">Descargar</a>
+          <a class="btn secondary" href="/">Volver al inicio</a>
+        </div>
       {% else %}
         <p>Tu compra se registró correctamente.</p>
       {% endif %}
     {% endif %}
-  </div>
+    {% if pending %}<a class="btn secondary" href="/">Volver al inicio</a>{% elif not download_url %}<a class="btn" href="/">Volver al inicio</a>{% endif %}
+  </main>
 </body>
 </html>

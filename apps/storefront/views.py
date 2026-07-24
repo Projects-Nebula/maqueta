@@ -10,6 +10,7 @@ from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 from rest_framework import viewsets
+from rest_framework.decorators import action
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
@@ -112,6 +113,32 @@ class PaymentGatewayConfigViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         return PaymentGatewayConfig.objects.filter(owner=self.request.user)
+
+    @action(detail=True, methods=["post"])
+    def validate(self, request, pk=None):
+        """Validate stored credentials without creating a payment session."""
+        config = self.get_object()
+        required_fields, real_factory, _fake_factory = GATEWAY_REGISTRY[config.gateway]
+        credentials = config.get_credentials()
+        missing = [field for field in required_fields if not credentials.get(field)]
+        if missing:
+            return Response(
+                {
+                    "ok": False,
+                    "error": "missing_credentials",
+                    "missing": missing,
+                },
+                status=400,
+            )
+        try:
+            real_factory(credentials)
+        except Exception:
+            logger.warning("payment credentials could not initialize for %s", config.gateway)
+            return Response(
+                {"ok": False, "error": "invalid_credentials"},
+                status=400,
+            )
+        return Response({"ok": True, "message": "Credentials are complete and ready."})
 
     def perform_create(self, serializer):
         serializer.save(owner=self.request.user)

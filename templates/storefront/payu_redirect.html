@@ -1,17 +1,39 @@
-<!DOCTYPE html>
+{% load static %}<!DOCTYPE html>
 <html lang="es">
 <head>
   <meta charset="UTF-8">
   <title>Redirigiendo a PayU…</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="{% static 'shared/tokens.css' %}">
+  <style>
+    * { box-sizing: border-box; }
+    body { min-height: 100vh; margin: 0; padding: 16px; display: grid; place-items: center;
+           background: var(--app-bg); color: var(--text); font-family: var(--font-sans); }
+    .card { width: min(360px, 100%); padding: 28px; text-align: center; background: var(--panel-bg);
+            border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); }
+    p { margin: 0 0 16px; color: var(--muted); }
+    button, a { display: inline-block; padding: 10px 16px; border: 0; border-radius: 8px;
+                background: var(--primary); color: #fff; font: inherit; font-weight: 700; text-decoration: none; cursor: pointer; }
+    a { margin-left: 6px; background: var(--panel-soft); color: var(--text); }
+  </style>
 </head>
 <body>
-  <p>Redirigiendo a PayU…</p>
-  <form id="payuForm" method="post"
-        action="https://sandbox.checkout.payulatam.com/ppp-web-gateway-payu/">
-    {% for name, value in fields.items %}
-      <input type="hidden" name="{{ name }}" value="{{ value }}">
-    {% endfor %}
-  </form>
-  <script>document.getElementById("payuForm").submit();</script>
+  <main class="card">
+    <p>Redirigiendo a PayU…</p>
+    <form id="payuForm" method="post"
+          action="https://sandbox.checkout.payulatam.com/ppp-web-gateway-payu/">
+      {% for name, value in fields.items %}
+        <input type="hidden" name="{{ name }}" value="{{ value }}">
+      {% endfor %}
+      <button type="submit">Continuar a PayU</button>
+      <a href="{% url 'storefront:checkout-cancel' %}">Cancelar</a>
+    </form>
+    <noscript>JavaScript está desactivado. Usá el botón para continuar.</noscript>
+  </main>
+  <script>
+    window.setTimeout(function () {
+      document.getElementById("payuForm").submit();
+    }, 250);
+  </script>
 </body>
 </html>
