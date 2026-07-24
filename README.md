@@ -17,14 +17,21 @@ config/            Django project (settings split: base/development/production)
 apps/
   accounts/        Login/logout (Django auth views)
   editor/          /editor/, /home/, /gallery/, /wizard/; Template · UserTemplate ·
-                    UserTemplateRevision models + owner-scoped DRF API
+                    UserTemplateRevision · UserPalette models + owner-scoped DRF
+                    APIs + the server-backed palette catalog/validation
   ai_assistant/    Edit-time transform endpoint + the template wizard's 3
                     endpoints; sanitizer, document validator, providers, prompts
   projects/        Project + ProjectRevision API (owner-scoped, no IDOR)
-templates/         login, editor shell, home/gallery pickers, wizard page
+  analytics/       Opt-in pseudonymous visitor sessions, bounded interactions,
+                   owner-scoped metrics/heatmap, and retention command
+templates/         login, editor shell, home/gallery pickers, wizard page,
+                  analytics dashboard
 static/editor/     editor.css, editor-core.js (verbatim editor), editor-ai.js,
                     template-wizard.js, wizard.css
-tests/             pytest suite + a Node test for applyAIOperations
+static/shared/     tokens.css (shared cross-page design tokens) · ai-stream.js
+                    (shared AI SSE/reasoning client)
+static/analytics/  public consent tracker and authenticated dashboard assets
+tests/             pytest suite + Node tests for frontend behavior
 ```
 
 Request flow for an AI edit:
@@ -51,10 +58,14 @@ Request flow for the template wizard (`/wizard/`):
 2. The filled form goes to `POST /api/ai/wizard/review/`, which decides
    `ready` or asks one clarifying question via chat (looped, capped at 5
    rounds).
-3. Once ready, `POST /api/ai/wizard/generate/` produces the page in two AI
-   calls — structure (the HTML tree, styled inline with Tailwind utility
-   classes) first, then just the brand-color palette (`styles.variables`) —
-   reducing how often a single huge generation gets cut off mid-response.
+3. Before generation, the user may choose one of the server-backed template
+   palette presets or one of their saved palettes from `/api/user-palettes/`.
+   Once ready, `POST /api/ai/wizard/generate/` produces the
+   page in two AI calls — structure (the HTML tree, styled inline with
+   Tailwind utility classes) first, then just the brand-color palette. A
+   selected preset is applied exactly by the server; without one, the AI result
+   is normalized to the four allowed palette roles and `styles.palette` is
+   marked `source: "ai"`.
    The assembled document is validated whole (`document_validation.py`)
    before it's ever returned.
 4. The client saves the result through the **already-existing**
@@ -67,7 +78,7 @@ Request flow for the template wizard (`/wizard/`):
 - Python 3.12
 - [uv](https://docs.astral.sh/uv/) (`curl -LsSf https://astral.sh/uv/install.sh | sh`)
 - Node 20+ (Tailwind CSS build — `npm install && npm run build:css`)
-- Docker + Docker Compose (optional, for the reproducible stack)
+- Docker + Docker Compose (local PostgreSQL and the reproducible stack)
 
 ## Local setup
 
@@ -79,19 +90,36 @@ uv run python manage.py createsuperuser
 uv run python manage.py runserver         # http://localhost:8000/editor/
 ```
 
+`run-local.sh` is the canonical local path: it honors the existing `.env`,
+starts `docker compose up -d --wait db` when `DATABASE_URL` points to
+PostgreSQL, applies migrations, and starts Django. PostgreSQL is the intended
+local database; SQLite remains available only as an explicit isolated-test or
+fallback override. It uses port 8000 by default; if that port is already in
+use, stop the existing server or run `PORT=8001 ./run-local.sh`.
+
+Use `./stop-local.sh` to stop Django without touching PostgreSQL. Add `--db`
+to stop the PostgreSQL container too; its data volume is preserved.
+
 `AI_PROVIDER=fake` (the default when `OPENAI_API_KEY` is empty) lets the whole
-flow work offline — the fake provider returns safe example operations.
+flow work offline — the fake provider returns safe example operations. Keep
+the local quality gate deterministic with `AI_PROVIDER=fake uv run pytest`;
+live-provider runs are useful separately for model verification.
 
 ## Quality gates
 
 ```bash
 uv run ruff check .
 uv run ruff format --check .
-uv run pytest
+AI_PROVIDER=fake uv run pytest            # deterministic AI-backed test gate
 uv run python manage.py check
 uv run python manage.py makemigrations --check --dry-run
-node tests/js/apply.test.js               # frontend applyAIOperations tests
+npm test                                   # frontend Node test suite
+npm run build:css                          # required after frontend/Tailwind changes
 ```
+
+Frontend changes also require the relevant real-browser specs in
+`tests/e2e/`; use the version-matched official Playwright container when the
+host lacks Chromium system libraries (see `AGENTS.md`).
 
 ## Docker
 
@@ -166,20 +194,63 @@ You can also attach images (step 3 or 4) — they're resized/re-encoded
 server-side and made available for the AI to place in the generated page
 (`state.assets`, never AI-authored directly — see `BACKLOG.csv`).
 
+## Anonymous analytics
+
+Published pages at `/t/<slug>/` show an opt-in consent banner. After consent,
+the public tracker uses a separate first-party, HttpOnly pseudonymous visitor
+cookie and sends bounded batches containing pageviews, heartbeats, safe click
+descriptors, sampled pointer positions, and page exits. It never sends form
+values, query strings, IP addresses, or authentication identity. The server
+stores normalized interaction coordinates and exposes only owner-scoped data at
+`/analytics/` through the metrics, sessions, and heatmap APIs.
+
+Analytics data is not deleted implicitly during requests. Run the retention
+command from a scheduler appropriate for the deployment:
+
+```bash
+uv run python manage.py purge_analytics
+uv run python manage.py purge_analytics --days=30
+```
+
+`ANALYTICS_RETENTION_DAYS` defaults to 90 days and
+`ANALYTICS_COOKIE_MAX_AGE` defaults to one year. The settings are read when
+the process starts, so restart Django after changing `.env`.
+
+## UI styling
+
+Cross-page surfaces link `static/shared/tokens.css` for the canonical
+background, panel, border, text, accent, typography, radius, and shadow tokens.
+Page-specific layout rules remain local; new templates must consume the shared
+variables instead of declaring another page-level `:root` palette.
+
+The dated frontend audit and implementation status live in `UXUI.md`. The
+2026-07-24 behavior/accessibility pass is complete: quick-insert presets,
+modal keyboard/focus behavior, mobile editor density, in-page operation
+feedback, wizard asset lifecycle, checkout/edge states, auth sizing, workspace
+navigation, editor exit navigation, analytics consent, reusable palettes, and
+the shared AI stream client are covered. The durable palette contract is in
+`openspec/specs/editor/palettes.md`. Future UI changes must preserve the shared
+tokens and semantic feedback primitives; do not start another global token
+pass without a measured reuse problem.
+
 ## Security notes
 
 - Auth is the Django session (same-origin) + CSRF; the AI endpoint requires an
   authenticated session and rejects requests without a valid `X-CSRFToken`.
-- The AI can never emit scripts, `on*` handlers, `iframe/object/embed`,
-  `javascript:`/`data:text/html` URLs, or a non-allowlisted Tailwind class
-  (`apps/ai_assistant/tailwind_classes.py`) — enforced server-side in
-  `sanitize.py` + `operations.py` (incremental edits) and
-  `document_validation.py` (whole documents from the wizard), independent
+- The AI can never emit scripts, `on*` handlers, arbitrary iframes,
+  `object/embed`, `javascript:`/`data:text/html` URLs, or a non-allowlisted
+  Tailwind class (`apps/ai_assistant/tailwind_classes.py`) — the only iframe
+  exception is an approved YouTube/Vimeo embed prefix. These controls are
+  enforced server-side in `sanitize.py` + `operations.py` (incremental edits)
+  and `document_validation.py` (whole documents from the wizard), independent
   of the model. A malformed AI response may get a best-effort JSON-syntax
   repair (`json-repair`), but the repaired result still goes through the
   same full validation before it's ever returned — a "fixed" but unsafe or
   structurally broken document is still rejected.
 - Endpoints are throttled per scope (`ai_transform`, `ai_wizard_questions`,
-  `ai_wizard_review`, `ai_wizard_generate`); project/template access is
+  `ai_wizard_review`, `ai_wizard_generate`); project/template/palette access is
   owner-scoped (no IDOR); provider keys stay server-side, never in the
   browser.
+- Anonymous analytics is opt-in and deliberately separate from Django auth
+  sessions. Public consent/collect requests are bounded and do not accept raw
+  form values or unvalidated coordinates; dashboard queries are owner-scoped.

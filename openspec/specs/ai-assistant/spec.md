@@ -21,9 +21,22 @@ calling the provider.
 - THEN respond 400
 
 #### Scenario: Unsafe selected node
-- WHEN `selected_node` contains a forbidden tag (`script/iframe/object/embed/applet/base`),
+- WHEN `selected_node` contains a forbidden tag
+  (`script/object/embed/applet/base`), an iframe with a disallowed source,
   an `on*` attribute, `srcdoc`, or an unsafe URL scheme
 - THEN respond 400
+
+YouTube/Vimeo iframes are the only supported exception and must use the
+allowlisted embed URL prefixes enforced by `sanitize.py`, the live preview, and
+the CSP `frame-src` directive.
+
+#### Scenario: Legacy classes in selected context
+- WHEN `selected_node` comes from a pre-Tailwind saved page and contains
+  semantic classes such as `site-header` or `container`
+- THEN accept the structurally safe node after removing those legacy classes
+  from the AI-only context
+- AND keep the strict Tailwind allowlist authoritative for every generated
+  operation and newly generated node
 
 #### Scenario: Missing selection
 - WHEN neither `selected_node` nor `global_mode` is provided
@@ -46,6 +59,15 @@ The AI SHALL return only `{summary, operations}` where every operation is one of
   moved into itself, allowlisted tags/attributes/CSS, safe URLs, and count/size
   within `AI_MAX_OPERATIONS`
 - AND any violation rejects the whole response (HTTP 422 `invalid_operations`)
+
+#### Scenario: Palette variable operation
+- WHEN an operation uses `set_style_variable`
+- THEN its name MUST be one of the four semantic palette roles and its value
+  MUST be a six-digit hex color
+- AND the provider cannot use this operation to add font, spacing, arbitrary
+  CSS, or unknown palette variables
+- AND the complete palette contract remains defined in
+  `openspec/specs/editor/palettes.md`
 
 ## Requirement: Swappable provider
 The system SHALL depend on an `AIProvider` interface with these implementations,

@@ -8,6 +8,41 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **Owner-scoped reusable palettes.** `UserPalette` now provides validated
+  CRUD at `/api/user-palettes/`; the editor can save/apply/delete entries and
+  the wizard can deterministically reuse the current user's saved colors while
+  keeping `styles.variables` as the only rendering source.
+- **Shared AI stream client.** Editor and wizard now consume
+  `static/shared/ai-stream.js` for SSE buffering, terminal events, and live
+  reasoning display, with a Node regression for chunk-boundary handling.
+- **Configurable template palettes.** The editor now exposes a single server
+  catalog with Ocean, Forest, Sunset, Neutral, and High Contrast presets,
+  custom four-role palettes, accessible contrast feedback, one-step preset
+  undo, and responsive 320px/390px controls. `styles.variables` remains the
+  rendering source of truth while optional `styles.palette` metadata is
+  validated server-side. The wizard accepts a preset context or produces a
+  validated AI palette, and published pages, thumbnails, previews, and JSON
+  exports preserve the active colors. The durable behavior contract is in
+  `openspec/specs/editor/palettes.md`.
+- **Opt-in anonymous analytics for published pages.** Public templates now
+  offer a consent banner and, only after acceptance, record pseudonymous
+  pageviews, session duration, safe click descriptors, sampled pointer activity,
+  and page exits. Sellers get an owner-scoped `/analytics/` dashboard with
+  period/template filters, session summaries, and a normalized heatmap;
+  `purge_analytics` enforces the configured retention window without storing
+  IP addresses, auth identity, query strings, or form values.
+
+- **Visible editor exit navigation.** The editor topbar now includes an
+  accessible `Salir` link back to the authenticated template gallery, with a
+  responsive style and browser regression.
+- **Frontend UX/accessibility implementation pass.** Quick-insert presets now
+  render allowlisted Tailwind utilities; editor dialogs, tabs, device controls,
+  async feedback, mobile layout, wizard asset deletion/cancellation, checkout
+  result states, PayU redirect fallback, auth forms, and workspace navigation
+  now have explicit keyboard, responsive, loading, success, error, and retry
+  behavior. Payment configuration also exposes a non-charging credential
+  validation action that checks stored provider readiness without creating a
+  checkout session.
 - **Free delivery ($0 tracked `Order`) when a seller has no gateway
   enabled.** Rather than 404 or silently give the product away untracked,
   `CheckoutView` now delivers directly and records a real, permanent
@@ -179,6 +214,11 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **Shared UI design tokens across all server-rendered surfaces.** Extracted
+  the editor's canonical palette, typography, radius, and shadow variables to
+  `static/shared/tokens.css`; editor, wizard, template galleries, storefront,
+  checkout result, login, and signup pages now link that stylesheet and use
+  the same token names instead of maintaining competing inline sets.
 - **Docker build now installs Node 20** (build stage only, never in the
   runtime image) to run the Tailwind CSS build. Debian bookworm's `apt`
   `nodejs` package is 18.x, too old for Tailwind v4 — installed from
@@ -266,6 +306,13 @@ this project adheres to [Semantic Versioning](https://semver.org/).
   (`max-w-4xl`, `max-w-prose`, `max-w-none`, etc.) — one of the most common
   classes for a page container, rejected outright as "disallowed Tailwind
   class". `w`/`min-w`/`h`/`min-h`/`max-h` are unaffected.
+- **AI transform rejected legacy classes on selected editor nodes.** Existing
+  pages created before the Tailwind migration contain semantic classes such as
+  `site-header`, which are valid for backward-compatible rendering but not
+  valid AI output classes. The transform now removes only those legacy tokens
+  from the selected-node context before generation; generated operations still
+  use the strict Tailwind allowlist. The offline fake provider also emits an
+  allowlisted highlight class.
 - **AI couldn't embed YouTube/Vimeo videos.** `<iframe>` was fully forbidden
   by `sanitize.py`, so any instruction to embed a video failed with a generic
   "cambios no válidos" error. `<iframe>` is now allowed, restricted to a

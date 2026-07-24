@@ -12,20 +12,44 @@ not what the project is.
 uv sync
 npm install
 npm run build:css                           # compiles static/editor/tailwind.css
-docker compose up -d db                     # local PostgreSQL
+docker compose up -d --wait db              # local PostgreSQL (run-local.sh does this automatically)
 uv run python manage.py migrate
 uv run python manage.py createsuperuser
 uv run python manage.py runserver           # http://localhost:8000/home/
+# Optional scheduled cleanup for opt-in anonymous analytics:
+uv run python manage.py purge_analytics
 ```
 
 `.env` is read once at process start (`environ.Env.read_env()` in
 `config/settings/base.py`) — changing it requires a full server restart, the
 autoreloader does NOT pick it up (it only watches `.py`/`.html`/`.js`).
+PostgreSQL is the canonical local database. `run-local.sh` honors the existing
+`.env` and automatically runs `docker compose up -d --wait db` before
+migrations when `DATABASE_URL` uses a PostgreSQL URL. SQLite remains available
+only as an explicit isolated-test or fallback override. The script uses port
+8000 by default, detects an occupied port before doing the setup work, and
+accepts `PORT=8001 ./run-local.sh` when another process already owns 8000.
+Use `./stop-local.sh` to stop only Django; pass `--db` when PostgreSQL should
+also be stopped. The command never removes the PostgreSQL data volume.
 
 Styling is Tailwind CSS (utility classes on `attributes.class`, see
 `apps/ai_assistant/tailwind_classes.py`) — `npm run build:css` must be rerun
 after changing the class allowlist there, since it regenerates the safelist
 that drives the Tailwind CLI build. Needs Node 20+ (Tailwind v4).
+Cross-page UI tokens live in `static/shared/tokens.css`; link that stylesheet
+from new server-rendered pages and consume its canonical variables instead of
+adding another page-level `:root` palette. Page-specific layout rules may stay
+local.
+Template palette behavior is separate from cross-page UI tokens: the active
+template colors live in `styles.variables`, optional provenance lives in
+`styles.palette`, and the server catalog/validation in
+`apps/editor/palettes.py` is the source of truth. Reusable `UserPalette` rows
+are owner-scoped and expose only validated four-role values through
+`/api/user-palettes/`; applying one copies those values into the template
+state. Read
+`openspec/specs/editor/palettes.md` before changing this contract.
+The editor AI and wizard load `static/shared/ai-stream.js` before their
+surface scripts; do not reintroduce a second SSE parser or reasoning bubble.
 `static/editor/tailwind.css` and `.tailwind-safelist.txt` are gitignored
 build artifacts, never commit them.
 
@@ -36,10 +60,10 @@ All of these must pass:
 ```bash
 uv run ruff check .
 uv run ruff format --check .
-uv run pytest
+AI_PROVIDER=fake uv run pytest            # deterministic AI-backed test gate
 uv run python manage.py check
 uv run python manage.py makemigrations --check --dry-run
-node tests/js/apply.test.js
+npm test
 ```
 
 For UI/frontend changes, actually run the feature in a browser (or via a
@@ -59,6 +83,10 @@ root, with the dev server already running on the host:
 docker run --rm --network host -v "$PWD":/work -w /work \
   mcr.microsoft.com/playwright:v1.61.1-jammy npx playwright test tests/e2e
 ```
+
+If the container created a `test-results/` directory owned by its service
+user, add `--output /tmp/maqueta-e2e-container` so the reporter does not need
+to rewrite mounted container-owned artifacts.
 
 Keep the image tag matched to the installed `@playwright/test` version
 (`npx playwright --version`) — a mismatch fails the browser launch.
@@ -136,6 +164,11 @@ After solving a problem:
   setting back; that pattern was deliberately replaced this session because
   this is a multi-tenant editor (each seller has their own gateway
   accounts, same as `/productos/` is already owner-scoped).
+- **Anonymous analytics is opt-in and pseudonymous.** Public `/t/<slug>/`
+  pages track only after consent, using a separate HttpOnly visitor cookie and
+  bounded page/click/mouse events. Never add auth identifiers, IP addresses,
+  raw form values, href/query strings, or unvalidated coordinates; use the
+  owner-scoped `/analytics/` dashboard and `purge_analytics` retention command.
 
 ## Testing AI-backed endpoints manually
 
@@ -158,6 +191,8 @@ stream, not a single JSON blob, when parsing it.
 
 - `openspec/project.md` — stack, layout, commands, non-obvious gotchas.
 - `CHANGELOG.md` — what shipped.
+- `UXUI.md` — dated frontend audit, browser evidence, completed UX/accessibility
+  acceptance matrix, and continuous-improvement criteria for future UI work.
 - `BACKLOG.csv` — known limitations and pending work, structured for
   filtering (status/area/category/verification/blocked_by).
 - `learnings.jsonl` — verified technical learnings from past debugging, one
@@ -165,3 +200,7 @@ stream, not a single JSON blob, when parsing it.
   "Using learnings.jsonl" above).
 - `openspec/specs/` / `openspec/changes/` — capability specs and in-flight
   change proposals.
+- `openspec/specs/editor/palettes.md` — active template palette contract,
+  reusable catalog, and verification evidence.
+- `TODO.md` — concise status index only; completed implementation checklists
+  belong in OpenSpec and the delivery records above.

@@ -40,8 +40,11 @@ The system SHALL <behavior>.
 
 - `specs/ai-assistant/` — AI transform, sanitization, operation protocol.
 - `specs/projects/` — project persistence + revisions.
-- `specs/editor/` — editor shell + AI panel integration (session + CSRF auth).
+- `specs/editor/` — editor shell, AI panel integration (session + CSRF auth),
+  and the bounded template palette contract.
 - `specs/storefront/` — products, multi-gateway checkout, orders, downloads.
+- `specs/analytics/` — consent-gated anonymous collection, owner-scoped
+  reporting, heatmaps, and retention.
 
 ## Governance: when to use this flow vs. a root-level plan document
 

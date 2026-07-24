@@ -29,8 +29,8 @@ token/device flow is needed.
   `json-repair` salvages malformed AI JSON before falling back to an error.
   `jsonschema` for the operation schema.
 - **PostgreSQL for local dev and production** (via `DATABASE_URL`; the repo
-  `compose.yaml` provides a `db` service). SQLite only as the fallback default
-  when `DATABASE_URL` is unset.
+  `compose.yaml` provides a `db` service). SQLite is supported only as an
+  explicit isolated-test or fallback override.
 - pytest + pytest-django + pytest-mock, ruff (lint + format).
 - Docker + Docker Compose.
 
@@ -40,15 +40,16 @@ token/device flow is needed.
 config/            settings base/development/production, urls, CSP middleware, wsgi/asgi
 apps/accounts      login/logout
 apps/editor        serves /editor/ /home/ /gallery/ /wizard/; Template ·
-                   UserTemplate · UserTemplateRevision models, admin,
-                   UserTemplate DRF API (api_urls, revisions
-                   history/restore/delete); ensure_csrf_cookie
+                   UserTemplate · UserTemplateRevision · UserPalette models,
+                   admin, owner-scoped UserTemplate and UserPalette DRF APIs
+                   (template revisions history/restore/delete); palette
+                   catalog/validation; ensure_csrf_cookie
 apps/ai_assistant  sanitize · operations · providers (Anthropic/OpenAI-compatible/
                    fake, model-based routing) · schema · prompts · service
                    (EditorAIService: chat model clarifies instruction → main
                    model generates operations) · serializers · views (edit-time
                    transform) · wizard_service (WizardAIService: same two-role
-                   split; generate is itself 2 calls — structure then styles)
+                   split; generate is itself 2 calls — structure then palette)
                    · wizard_views · document_validation (sanitizes a FULL
                    generated document, strict key checks at every level) · sse
 apps/projects      Project + ProjectRevision API (owner-scoped)
@@ -63,17 +64,24 @@ apps/storefront    Product · Order (gateway-scoped) · PaymentGatewayConfig
                    Pago/PayPal/Braintree/Wompi/PayU/ePayco/Bold — same
                    swappable pattern as apps.ai_assistant.providers);
                    crypto.py (Fernet encryption for stored credentials)
+apps/analytics     Pseudonymous opt-in visitor/session/event models, public
+                   consent/collect endpoints, owner-scoped dashboard APIs,
+                   heatmap aggregation, admin, and purge_analytics command
 templates/         registration/login · editor/editor.html · editor/home.html ·
                    editor/gallery.html · editor/template_wizard.html ·
                    storefront/products.html · storefront/payment_config.html ·
                    storefront/success.html · storefront/checkout_cancel.html ·
                    storefront/payu_redirect.html
+                   analytics/dashboard.html
 static/editor/     editor.css · editor-core.js · editor-ai.js · seed-loader.js ·
                    save-template.js · wizard.css · template-wizard.js ·
                    autosave.js · tailwind-input.css (source) ·
                    tailwind.css (compiled, gitignored, `npm run build:css`)
+static/shared/     tokens.css (shared cross-page design tokens) ·
+                   ai-stream.js (shared AI SSE/reasoning client)
 static/storefront/ products.js (/productos/) · payment-config.js (/config/)
-tests/             pytest + tests/js/apply.test.js (Node) + tests/e2e/ (Playwright)
+static/analytics/  public-tracker.js/css · dashboard.js/css
+tests/             pytest + tests/js/ (Node) + tests/e2e/ (Playwright)
 openspec/          this spec set (project.md · specs/ · changes/)
 ```
 
@@ -101,8 +109,12 @@ openspec/          this spec set (project.md · specs/ · changes/)
   looped up to 5 rounds — `MAX_REVIEW_ROUNDS` in `template-wizard.js`), then
   `POST /api/ai/wizard/generate/` produces the document in **two** AI calls
   (`WizardAIService.stream_generate_document`): structure (HTML tree, no
-  styles) first, then styles (CSS for the classes that structure
-  introduced, given the body as context) — a single call asking for both
+  styles) first, then the four palette variables (the Tailwind classes are
+  authored in the structure call). If the user selected a preset or an
+  owner-scoped saved palette, the server applies its catalog values exactly
+  and skips the style-color call; otherwise
+  the second call is normalized to `styles.palette.source: "ai"` — a single
+  call asking for both
   was where the model most reliably ran out of steam and silently dropped
   the trailing keys. `components`/`assets` (always `{}`, no image-upload
   feature exists yet) are force-injected in Python rather than trusted from
@@ -126,20 +138,35 @@ openspec/          this spec set (project.md · specs/ · changes/)
 
 ```bash
 uv sync
-docker compose up -d db                     # local PostgreSQL (creds editor/editor/editor)
+docker compose up -d --wait db              # local PostgreSQL (creds editor/editor/editor)
 uv run python manage.py migrate
 uv run python manage.py createsuperuser
 uv run python manage.py runserver          # http://localhost:8000/home/
 # Quality gates (all must pass before "done"):
 uv run ruff check .
 uv run ruff format --check .
-uv run pytest
+AI_PROVIDER=fake uv run pytest            # deterministic AI-backed test gate
 uv run python manage.py check
 uv run python manage.py makemigrations --check --dry-run
-node tests/js/apply.test.js
+npm test
+npm run build:css                          # required after Tailwind/frontend changes
+uv run python manage.py purge_analytics --days=90
+# Or use the canonical local bootstrap (starts PostgreSQL automatically):
+./run-local.sh
 # Docker:
 docker compose up --build
 ```
+
+`run-local.sh` uses port 8000 by default and detects an occupied port before
+installing/building anything. Use `PORT=8001 ./run-local.sh` when another
+development server already owns 8000.
+`stop-local.sh` stops the Django development server without touching the
+database by default; `./stop-local.sh --db` also stops PostgreSQL while
+preserving its volume.
+
+Frontend changes additionally require a real-browser run of the relevant
+`tests/e2e/` specs. When Chromium system libraries are unavailable on the host,
+use the version-matched official Playwright container described in `AGENTS.md`.
 
 ## Conventions
 
@@ -159,6 +186,11 @@ docker compose up --build
   variables + instruction.
 - **One AI apply = one undo step** (`EditorCore.commitProposal`).
 - Migrations excluded from ruff.
+- **Analytics is intentionally opt-in.** `/t/<slug>/` does not create an
+  analytics cookie or event before consent. The visitor UUID is separate from
+  Django authentication/session identity; collect accepts only bounded,
+  normalized event descriptors. Run `purge_analytics` on a schedule because
+  retention is an operational command, not request-time deletion.
 
 ## Non-obvious gotchas
 
@@ -195,9 +227,46 @@ docker compose up --build
   still render (`buildCss()`, `rendering.py`) for backward compatibility
   with pre-Tailwind saved pages, but new content never writes to them;
   `set_css_declaration`/`remove_css_declaration` stay valid operations only
-  for editing that legacy content. `styles.variables` (CSS custom
-  properties, e.g. `--color-primary`) is unaffected — Tailwind classes
-  reference them via `bg-[var(--color-primary)]`.
+  for editing that legacy content. `styles.variables` (CSS custom properties,
+  e.g. `--color-primary`) remains the only rendered color source — Tailwind
+  classes reference it via `bg-[var(--color-primary)]`. Optional
+  `styles.palette` metadata contains only `id`, `name`, and `source`; the
+  canonical catalog and validation live in `apps/editor/palettes.py`, with the
+  complete contract in `openspec/specs/editor/palettes.md`. Legacy states
+  without metadata are accepted without rewrite and are not inferred as a
+  preset from matching values. A selected wizard preset is applied server-side
+  exactly; an unselected result is marked `source: "ai"`.
+- **Legacy classes are context-only compatibility data.** Pre-Tailwind saved
+  nodes can still contain semantic classes such as `site-header` and
+  `container`. `TransformRequestSerializer` runs `sanitize_context_node`,
+  which removes those non-Tailwind tokens recursively before the AI sees a
+  selected node while retaining the same structural, URL, attribute, depth,
+  and size checks. `sanitize_node` and operation validation remain strict, so
+  this compatibility path cannot authorize legacy classes in AI output.
+- **Reusable palettes are owner-scoped catalog data.** `UserPalette` entries
+  are served through `/api/user-palettes/`, injected into the editor/wizard,
+  and resolved through the authenticated owner before wizard generation.
+  Applying one copies only its four role values into `styles.variables`; the
+  document stores safe provenance metadata and never depends on the catalog at
+  render time.
+- **AI stream transport lives in `static/shared/ai-stream.js`.** The editor
+  assistant and wizard provide only surface-specific status/scroll callbacks;
+  SSE buffering, terminal event collection, and live reasoning filtering stay
+  in the shared module. Load it before either consumer.
+- **Cross-page UI tokens live in `static/shared/tokens.css`.** The editor,
+  wizard, galleries, storefront management/result pages, and auth templates
+  link this stylesheet and use its canonical `--app-bg`, `--panel-bg`,
+  `--border`, `--text`, `--muted`, `--primary`, `--font-sans`, `--radius`, and
+  `--shadow` variables. Do not add another page-level `:root` palette; keep
+  layout and component-specific rules local until a concrete reuse case
+  justifies extraction.
+- **`UXUI.md` is the current frontend audit source of truth.** The 2026-07-24
+  browser pass found the shared token layer healthy and the resulting
+  behavior/accessibility implementation pass complete. Read that file before
+  adding another modal or management-page flow; it records the historical
+  findings, the completed acceptance matrix, the non-charging gateway
+  credential validation contract, the template palette UX, and the required
+  browser checks.
 - Tailwind's CLI auto-scans the whole project for candidate class names by
   default — **verified** this compiles literally any Tailwind-shaped string
   found anywhere, including test fixtures (a security-test string
@@ -208,7 +277,10 @@ docker compose up --build
   remove `source(none)`.
 - `AI_MAX_OPERATIONS` (default 150) caps ops per AI response.
 - `AI_PROVIDER` selects the provider; `fake` (default when no key) makes the
-  whole flow work offline and is what tests rely on.
+  whole flow work offline and is what tests rely on. Use
+  `AI_PROVIDER=fake uv run pytest` for the deterministic local quality gate;
+  live-provider runs are separate model verification and can produce
+  non-allowlisted Tailwind classes.
 - **Multi-gateway checkout, per-seller, not a global `PAYMENT_PROVIDER`
   setting anymore.** The buyer picks the gateway at checkout
   (`POST /comprar/<id>/<gateway>/`); credentials live in `PaymentGatewayConfig`
@@ -376,13 +448,11 @@ docker compose up --build
   (`getNode`/`getParentInfo`/`updateAll` in `editor-core.js`, no AI
   round-trip) since it's wiring, not content generation. Both were
   explicit, asked-for product decisions — see `BACKLOG.csv` rows 44/45.
-- `static/editor/editor-core.js`'s `sectionPreset()` (Hero/Beneficios/
-  Texto/Imagen/Llamado/Footer quick-insert presets) still uses semantic
-  classes (`.hero`, `.container`, `.feature-grid`, `.cta-box`) from before
-  the Tailwind migration — **no stylesheet in the project defines any of
-  them**, so every one of these presets renders completely unstyled. Known,
-  not yet fixed (`BACKLOG.csv` row 43); found as a side effect of
-  investigating the (now-fixed) unstyled product-card insert.
+- **Quick-insert presets use the Tailwind allowlist.** Hero, Beneficios,
+  Texto, Imagen, Llamado, and Footer now emit finite, compiled utility classes;
+  the old semantic-class regression is closed in `BACKLOG.csv` rows 43 and
+  55. Keep new preset classes in the allowlist and add a browser regression for
+  any new preset.
 
 ## Related durable context
 
@@ -390,5 +460,11 @@ docker compose up --build
 - `BACKLOG.csv` — pending work and known limitations, structured for
   filtering (status/area/category/verification/blocked_by).
 - `openspec/specs/` — current capability specs (source of truth for behavior).
+- `openspec/specs/editor/palettes.md` — active palette contract, catalog, AI
+  constraints, legacy behavior, and verification evidence.
+- `openspec/specs/analytics/spec.md` — consent, bounded collection,
+  owner-scoped reporting, heatmap, and retention contract.
+- `TODO.md` — concise status index only; completed implementation checklists
+  belong in the capability spec and delivery records.
 - `openspec/changes/` — in-flight change proposals (delta specs).
 - Session memory: `~/.claude/projects/-home-sebitcode-projects-maqueta/memory/`.

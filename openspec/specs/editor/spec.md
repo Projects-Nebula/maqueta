@@ -2,11 +2,20 @@
 
 Serves the visual editor and integrates the AI panel without breaking existing
 behavior. Code: `apps/editor/`, `templates/editor/`, `static/editor/`.
+The active template palette contract is defined separately in
+`openspec/specs/editor/palettes.md`.
+
+The editor and wizard consume the same server-injected palette catalog. The
+palette specification is normative for `styles.variables`, optional
+`styles.palette` metadata, legacy compatibility, persistence, rendering, and
+AI validation; this editor capability spec covers the surrounding shell and
+manual editing behavior.
 
 ## Requirement: Serve the editor
 The system SHALL serve the editor shell at `GET /editor/` (login required),
 split into a Django template + `editor.css` + `editor-core.js` + `editor-ai.js`
-+ `seed-loader.js` + `save-template.js`. All executable page logic lives in
++ `seed-loader.js` + `save-template.js`, plus the shared
+`static/shared/ai-stream.js` module. All executable page logic lives in
 external `.js` files because the page CSP is `script-src 'self'` (inline
 scripts are blocked); the injected template seed is inline
 `type="application/json"` data only.
@@ -15,6 +24,7 @@ scripts are blocked); the injected template seed is inline
 - WHEN a logged-in user opens `/editor/`
 - THEN the page references the static assets and the config endpoint (the AI
   transform URL), and sets the CSRF cookie via `ensure_csrf_cookie`
+- AND it receives the server-backed palette catalog used by the Design panel
 
 ## Requirement: Templates and gallery
 The system SHALL let a user start from a template. Curated base templates
@@ -112,6 +122,24 @@ to that element and shows an `@element` chip above the composer.
 - WHEN the panel calls `POST /api/ai/editor/transform/`
 - THEN it uses the browser session cookie plus an `X-CSRFToken` header
   (no bearer token, no device flow); the endpoint requires an authenticated session
+
+## Requirement: Share AI stream transport and reasoning display
+
+The editor and wizard SHALL load `static/shared/ai-stream.js` before their
+surface-specific scripts. The module SHALL own SSE block parsing, arbitrary
+network-chunk buffering, terminal `done`/`error` collection, and the live
+reasoning typing bubble. Each surface MAY provide its own status copy and
+scroll callback, but SHALL NOT maintain a second SSE parser or typing-bubble
+implementation.
+
+#### Scenario: Editor and wizard consume the same stream contract
+
+- WHEN either AI surface receives `event: reasoning` chunks followed by
+  `event: done` or `event: error`
+- THEN the shared module accumulates the reasoning text and returns the
+  terminal payload to that surface
+- AND chunk boundaries or a final block without a trailing separator do not
+  discard a valid event
 
 ## Requirement: Deterministic apply, single undo
 The frontend SHALL apply operations via `applyAIOperations(state, operations)`
