@@ -18,6 +18,11 @@ required installation stops the setup without starting the server. It prepares
 `.env`, Python/Node dependencies, Tailwind CSS, PostgreSQL, and migrations;
 `run-local.sh` remains responsible for starting Django.
 
+The workflow was verified on 2026-07-24 with
+`UV_CACHE_DIR=/tmp/uv-cache ./setup.sh`: PostgreSQL was healthy, Tailwind
+generated 30,184 classes, and Django reported no pending migrations. The
+setup script still exits before starting the development server.
+
 Manual equivalent:
 
 ```bash

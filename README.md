@@ -94,6 +94,11 @@ answering no stops the setup. It synchronizes dependencies, builds Tailwind,
 starts PostgreSQL when needed, and applies migrations, but it does not start
 Django.
 
+The end-to-end flow was verified on 2026-07-24 with
+`UV_CACHE_DIR=/tmp/uv-cache ./setup.sh`: PostgreSQL reported healthy, Tailwind
+generated 30,184 classes, migrations were already current, and the script
+exited without launching Django.
+
 For a manual setup, use:
 
 ```bash

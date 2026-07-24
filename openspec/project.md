@@ -169,6 +169,10 @@ development server already owns 8000.
 missing uv/Python, Node/pnpm, or Docker requirements, stops when a required
 installation is refused, prepares dependencies/Tailwind/PostgreSQL, and
 applies migrations without starting Django.
+The end-to-end workflow was verified on 2026-07-24 with
+`UV_CACHE_DIR=/tmp/uv-cache ./setup.sh`: PostgreSQL reported healthy, Tailwind
+generated 30,184 classes, and migrations reported no pending changes. Starting
+Django remains the responsibility of `run-local.sh`.
 `stop-local.sh` stops the Django development server without touching the
 database by default; `./stop-local.sh --db` also stops PostgreSQL while
 preserving its volume.

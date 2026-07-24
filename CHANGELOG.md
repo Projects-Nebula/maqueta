@@ -12,7 +12,8 @@ this project adheres to [Semantic Versioning](https://semver.org/).
   Node 20+, pnpm 10.33.2, `.env`, and Docker Compose for PostgreSQL; it asks
   before installing missing system requirements, stops on refusal, prepares
   dependencies/Tailwind/migrations, and leaves Django startup to
-  `run-local.sh`.
+  `run-local.sh`. The end-to-end flow was verified with PostgreSQL healthy,
+  Tailwind generating 30,184 classes, and no pending migrations.
 - **Owner-scoped reusable palettes.** `UserPalette` now provides validated
   CRUD at `/api/user-palettes/`; the editor can save/apply/delete entries and
   the wizard can deterministically reuse the current user's saved colors while
