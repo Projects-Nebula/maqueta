@@ -11,6 +11,7 @@ not what the project is.
 ```bash
 ./setup.sh                                # interactive prerequisite/dependency bootstrap
 ./run-local.sh                            # starts PostgreSQL when configured and Django
+./mockup.sh                                # destructive local reset + deterministic demo data
 ```
 
 `setup.sh` asks before installing missing system requirements. Refusing a
@@ -22,6 +23,12 @@ The workflow was verified on 2026-07-24 with
 `UV_CACHE_DIR=/tmp/uv-cache ./setup.sh`: PostgreSQL was healthy, Tailwind
 generated 30,184 classes, and Django reported no pending migrations. The
 setup script still exits before starting the development server.
+
+`mockup.sh` is a local-only destructive reset. It migrates first, flushes the
+database and referenced media files, and seeds deterministic records for every
+application model. It refuses `DEBUG=False` unless
+`MOCKUP_ALLOW_NON_DEBUG=1` is explicitly provided. The seeded local login is
+`demo` / `demo12345`.
 
 Manual equivalent:
 

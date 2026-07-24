@@ -8,6 +8,11 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **Deterministic local mockup loader.** `mockup.sh` starts local PostgreSQL,
+  migrates, flushes the development database and referenced media files, then
+  seeds users, templates, projects, palettes, assets, products, payment
+  configurations, orders, and analytics. It refuses non-development settings
+  unless `MOCKUP_ALLOW_NON_DEBUG=1` is explicitly provided.
 - **Interactive local setup bootstrap.** `setup.sh` verifies uv/Python 3.12+,
   Node 20+, pnpm 10.33.2, `.env`, and Docker Compose for PostgreSQL; it asks
   before installing missing system requirements, stops on refusal, prepares

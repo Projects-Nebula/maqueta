@@ -142,6 +142,7 @@ openspec/          this spec set (project.md · specs/ · changes/)
 ```bash
 ./setup.sh                               # interactive prerequisites/dependencies/PostgreSQL bootstrap
 ./run-local.sh                            # canonical Django development start
+./mockup.sh                               # destructive local reset + deterministic demo data
 uv sync
 docker compose up -d --wait db              # local PostgreSQL (creds editor/editor/editor)
 uv run python manage.py migrate
@@ -173,6 +174,10 @@ The end-to-end workflow was verified on 2026-07-24 with
 `UV_CACHE_DIR=/tmp/uv-cache ./setup.sh`: PostgreSQL reported healthy, Tailwind
 generated 30,184 classes, and migrations reported no pending changes. Starting
 Django remains the responsibility of `run-local.sh`.
+`mockup.sh` is the local demo-data bootstrap: it migrates, flushes the database
+and referenced media files, then creates deterministic records across auth,
+editor, projects, storefront, and analytics. It refuses non-development
+settings unless `MOCKUP_ALLOW_NON_DEBUG=1` is explicitly set.
 `stop-local.sh` stops the Django development server without touching the
 database by default; `./stop-local.sh --db` also stops PostgreSQL while
 preserving its volume.

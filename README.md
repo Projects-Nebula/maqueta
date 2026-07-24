@@ -85,6 +85,7 @@ Request flow for the template wizard (`/wizard/`):
 ```bash
 ./setup.sh                               # checks/asks for prerequisites and prepares the project
 ./run-local.sh                            # starts PostgreSQL (when configured) and Django
+./mockup.sh                               # resets local data and loads the demo catalog
 ```
 
 `setup.sh` is the interactive prerequisite bootstrap. It verifies uv/Python
@@ -98,6 +99,13 @@ The end-to-end flow was verified on 2026-07-24 with
 `UV_CACHE_DIR=/tmp/uv-cache ./setup.sh`: PostgreSQL reported healthy, Tailwind
 generated 30,184 classes, migrations were already current, and the script
 exited without launching Django.
+
+`mockup.sh` is intentionally destructive: it applies migrations, removes the
+current local database rows and referenced media files, then loads deterministic
+users, templates, projects, palettes, assets, products, payment configurations,
+orders, and analytics. It is restricted to development settings unless
+`MOCKUP_ALLOW_NON_DEBUG=1` is explicitly set. The demo login is `demo` /
+`demo12345`; the command prints the generated public page URL.
 
 For a manual setup, use:
 
