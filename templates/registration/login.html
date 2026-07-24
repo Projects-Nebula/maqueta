@@ -1,30 +1,32 @@
-<!DOCTYPE html>
+{% load static %}<!DOCTYPE html>
 <html lang="es">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Iniciar sesión</title>
+  <link rel="stylesheet" href="{% static 'shared/tokens.css' %}">
   <style>
-    body { font-family: system-ui, sans-serif; background: #f5f6fb; margin: 0;
-           display: grid; place-items: center; min-height: 100vh; }
-    .card { background: #fff; padding: 32px; border-radius: 16px; width: 320px;
-            box-shadow: 0 10px 40px rgba(30, 30, 80, .08); }
+    * { box-sizing: border-box; }
+    body { font-family: var(--font-sans); color: var(--text); background: var(--app-bg); margin: 0;
+           display: grid; place-items: center; align-content: center; min-height: 100vh; padding: 16px; }
+    .card { background: var(--panel-bg); border: 1px solid var(--border); padding: 32px;
+            border-radius: var(--radius); width: min(320px, 100%); box-shadow: var(--shadow); }
     h1 { font-size: 20px; margin: 0 0 16px; }
     label { display: block; font-size: 13px; margin: 12px 0 4px; }
-    input { width: 100%; padding: 10px; border: 1px solid #d5d9ec; border-radius: 8px;
-            box-sizing: border-box; }
+    input { width: 100%; padding: 10px; border: 1px solid var(--border); border-radius: 8px;
+            color: var(--text); background: var(--panel-bg); }
     button { width: 100%; margin-top: 20px; padding: 11px; border: 0; border-radius: 8px;
-             background: #5b5ce2; color: #fff; font-weight: 600; cursor: pointer; }
-    .error { color: #c0392b; font-size: 13px; margin-top: 12px; }
-    .footer-link { text-align: center; font-size: 13px; margin-top: 16px; color: #6b7094; }
-    .footer-link a { color: #5b5ce2; }
+             background: var(--primary); color: #fff; font-weight: 600; cursor: pointer; }
+    .error { color: var(--danger); font-size: 13px; margin-top: 12px; }
+    .footer-link { text-align: center; font-size: 13px; margin-top: 16px; color: var(--muted); }
+    .footer-link a { color: var(--primary); }
   </style>
 </head>
 <body>
   <form class="card" method="post">
     {% csrf_token %}
     <h1>Iniciar sesión</h1>
-    {% if form.errors %}<p class="error">Usuario o contraseña incorrectos.</p>{% endif %}
+    {% if form.errors %}<p class="error" id="loginError" role="alert">Usuario o contraseña incorrectos.</p>{% endif %}
     <label for="id_username">Usuario</label>
     {{ form.username }}
     <label for="id_password">Contraseña</label>
