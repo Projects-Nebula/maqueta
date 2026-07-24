@@ -1,0 +1,78 @@
+.app-feedback {
+  display: none;
+  margin: 0 0 16px;
+  padding: 11px 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--text);
+  background: var(--panel-soft);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.app-feedback.visible {
+  display: block;
+}
+
+.app-feedback[data-tone="success"] {
+  color: var(--success);
+  background: color-mix(in srgb, var(--success) 8%, white);
+  border-color: color-mix(in srgb, var(--success) 28%, white);
+}
+
+.app-feedback[data-tone="error"] {
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 8%, white);
+  border-color: color-mix(in srgb, var(--danger) 28%, white);
+}
+
+.app-feedback[data-tone="warning"] {
+  color: var(--warning);
+  background: var(--warning-soft);
+  border-color: color-mix(in srgb, var(--warning) 28%, white);
+}
+
+.file-control {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.file-control input[type="file"] {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  clip-path: inset(50%);
+}
+
+.file-control-button {
+  flex: 0 0 auto;
+  padding: 8px 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  color: var(--text);
+  background: var(--panel-soft);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.file-control-button:hover,
+.file-control-button:focus-visible {
+  border-color: var(--primary);
+  color: var(--primary);
+  outline: none;
+}
+
+.file-control-name {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

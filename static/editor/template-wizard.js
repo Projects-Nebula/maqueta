@@ -1,11 +1,4 @@
-/* AI-guided "create a custom template from scratch" wizard.
- *
- * ponytail: shares its SSE-parsing/typing-bubble logic conceptually with
- * editor-ai.js but keeps its own copy instead of extracting a shared module —
- * that editor-ai.js code is working and already iterated on; refactoring it
- * to accept parameters risked regressing it for a same-day payoff. Revisit
- * if a third consumer shows up.
- */
+/* AI-guided "create a custom template from scratch" wizard. */
 (function () {
   "use strict";
 
@@ -18,8 +11,30 @@
     fields: document.getElementById("wizardFields"),
     imageInput: document.getElementById("wizardImageInput"),
     imageList: document.getElementById("wizardImageList"),
+    cancel: document.getElementById("wizardCancel"),
+    restart: document.getElementById("wizardRestart"),
+    requestMessage: document.getElementById("wizardRequestMessage"),
+    paletteSelect: document.getElementById("wizardPaletteSelect"),
+    palettePreview: document.getElementById("wizardPalettePreview"),
   };
   if (!els.messages) return;
+
+  function readPaletteCatalog() {
+    const element = document.getElementById("palette-catalog");
+    if (!element) return { roles: [], presets: [], user_palettes: [] };
+    try {
+      const parsed = JSON.parse(element.textContent || "{}");
+      return {
+        roles: Array.isArray(parsed.roles) ? parsed.roles : [],
+        presets: Array.isArray(parsed.presets) ? parsed.presets : [],
+        user_palettes: Array.isArray(parsed.user_palettes) ? parsed.user_palettes : [],
+      };
+    } catch {
+      return { roles: [], presets: [], user_palettes: [] };
+    }
+  }
+
+  const paletteCatalog = readPaletteCatalog();
 
   const MAX_ASSETS = 20;
 
@@ -69,134 +84,24 @@
     return wrap;
   }
 
-  const TYPING_STATUS_MESSAGES = [
-    "Pensando…",
-    "Analizando tu idea…",
-    "Preparando la respuesta…",
-  ];
-  const TYPING_STATUS_INTERVAL_MS = 2200;
-  const REASONING_SENTENCE_RE = /\.\s*\n+/g;
+  let activeRequestController = null;
 
-  function looksLikeCode(text) {
-    if (!text) return true;
-    if (/^[{[]/.test(text)) return true;
-    if (/"[a-zA-Z0-9_-]+"\s*:/.test(text)) return true;
-    if (/<\/?[a-z][a-z0-9-]*(\s[^>]*)?>/i.test(text)) return true;
-    return false;
+  function setRequestState(isBusy, message) {
+    if (els.requestMessage) els.requestMessage.textContent = isBusy ? message : "";
+    if (els.cancel) els.cancel.classList.toggle("hidden", !isBusy);
+    if (els.send) els.send.disabled = isBusy;
   }
 
   function appendTypingBubble() {
-    const wrap = document.createElement("div");
-    wrap.className = "ai-msg ai-msg-assistant ai-msg-typing";
-    const bubble = document.createElement("div");
-    bubble.className = "ai-bubble ai-bubble-assistant ai-typing";
-    bubble.setAttribute("aria-label", "El asistente está trabajando");
-
-    const dots = document.createElement("span");
-    dots.className = "ai-typing-dots";
-    dots.appendChild(document.createElement("span"));
-    dots.appendChild(document.createElement("span"));
-    dots.appendChild(document.createElement("span"));
-    bubble.appendChild(dots);
-
-    const status = document.createElement("span");
-    status.className = "ai-typing-status";
-    status.textContent = TYPING_STATUS_MESSAGES[0];
-    bubble.appendChild(status);
-
-    wrap.appendChild(bubble);
-    els.messages.appendChild(wrap);
-    scrollToBottom();
-
-    let index = 0;
-    let live = false;
-    let shownSentenceCount = 0;
-    const timer = setInterval(() => {
-      if (live) return;
-      index = (index + 1) % TYPING_STATUS_MESSAGES.length;
-      status.textContent = TYPING_STATUS_MESSAGES[index];
-    }, TYPING_STATUS_INTERVAL_MS);
-
-    function setReasoning(text) {
-      if (!text) return;
-      live = true;
-      bubble.classList.add("ai-typing-live");
-      status.classList.add("ai-typing-status-live");
-
-      const sentences = [];
-      let lastEnd = 0;
-      let match;
-      REASONING_SENTENCE_RE.lastIndex = 0;
-      while ((match = REASONING_SENTENCE_RE.exec(text)) !== null) {
-        sentences.push(text.slice(lastEnd, match.index + 1).trim());
-        lastEnd = REASONING_SENTENCE_RE.lastIndex;
-      }
-      if (sentences.length <= shownSentenceCount) return;
-
-      for (let i = sentences.length - 1; i >= shownSentenceCount; i--) {
-        if (!looksLikeCode(sentences[i])) {
-          status.textContent = sentences[i];
-          scrollToBottom();
-          break;
-        }
-      }
-      shownSentenceCount = sentences.length;
-    }
-
-    function remove() {
-      clearInterval(timer);
-      wrap.remove();
-    }
-
-    return { remove, setReasoning };
-  }
-
-  function parseSseBlock(block) {
-    let eventName = "message";
-    let dataLine = null;
-    block.split("\n").forEach((line) => {
-      if (line.startsWith("event:")) eventName = line.slice(6).trim();
-      else if (line.startsWith("data:")) dataLine = line.slice(5).trim();
+    return window.AIStream.createTypingBubble({
+      messages: els.messages,
+      scrollToBottom,
+      statusMessages: [
+        "Pensando…",
+        "Analizando tu idea…",
+        "Preparando la respuesta…",
+      ],
     });
-    if (!dataLine) return null;
-    try {
-      return { event: eventName, data: JSON.parse(dataLine) };
-    } catch (err) {
-      return null;
-    }
-  }
-
-  // Reads an SSE response, calling onReasoning(text) for each "reasoning"
-  // chunk, and resolving with the terminal {done, error} event data.
-  async function consumeStream(response, onReasoning) {
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = "";
-    let reasoningSoFar = "";
-    let doneEvent = null;
-    let errorEvent = null;
-
-    while (true) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-      let separatorIndex;
-      while ((separatorIndex = buffer.indexOf("\n\n")) !== -1) {
-        const block = buffer.slice(0, separatorIndex);
-        buffer = buffer.slice(separatorIndex + 2);
-        const parsed = parseSseBlock(block);
-        if (!parsed) continue;
-        if (parsed.event === "reasoning") {
-          reasoningSoFar += parsed.data.text;
-          onReasoning(reasoningSoFar);
-        } else if (parsed.event === "done") {
-          doneEvent = parsed.data;
-        } else if (parsed.event === "error") {
-          errorEvent = parsed.data;
-        }
-      }
-    }
-    return { done: doneEvent, error: errorEvent };
   }
 
   function errorMessage(data) {
@@ -207,30 +112,43 @@
       invalid_questions: "No se pudo armar el formulario. Reformulá tu descripción.",
       invalid_document: "No se pudo generar la página. Intentá de nuevo.",
       invalid_input: "Solicitud no válida.",
+      network_error: "No se pudo conectar con el asistente. Revisá tu conexión e intentá de nuevo.",
     };
     return map[code] || "Algo salió mal. Intentá de nuevo.";
   }
 
   async function postStream(url, body) {
-    const response = await fetch(url, {
-      method: "POST",
-      credentials: "same-origin",
-      headers: {
-        "Content-Type": "application/json",
-        "X-CSRFToken": getCsrfToken(),
-      },
-      body: JSON.stringify(body),
-    });
-    const contentType = response.headers.get("content-type") || "";
-    if (!contentType.includes("text/event-stream")) {
-      const data = await response.json().catch(() => ({}));
-      return { done: null, error: data.error ? data : { error: "invalid_input" } };
-    }
-    const typingBubble = appendTypingBubble();
+    const controller = new AbortController();
+    activeRequestController = controller;
+    setRequestState(true, "El asistente está trabajando…");
     try {
-      return await consumeStream(response, (text) => typingBubble.setReasoning(text));
+      const response = await fetch(url, {
+        method: "POST",
+        credentials: "same-origin",
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRFToken": getCsrfToken(),
+        },
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      });
+      const contentType = response.headers.get("content-type") || "";
+      if (!contentType.includes("text/event-stream")) {
+        const data = await response.json().catch(() => ({}));
+        return { done: null, error: data.error ? data : { error: "invalid_input" } };
+      }
+      const typingBubble = appendTypingBubble();
+      try {
+        return await window.AIStream.consume(response, (text) => typingBubble.setReasoning(text));
+      } finally {
+        typingBubble.remove();
+      }
+    } catch (error) {
+      if (error.name === "AbortError") return { cancelled: true };
+      return { done: null, error: { error: "network_error" } };
     } finally {
-      typingBubble.remove();
+      if (activeRequestController === controller) activeRequestController = null;
+      setRequestState(false, "");
     }
   }
 
@@ -244,16 +162,97 @@
     reviewRounds: 0,
     phase: "intro",
     assets: [],
+    paletteId: "",
   };
+
+  function renderPalettePreview() {
+    if (!els.paletteSelect || !els.palettePreview) return;
+    const palette = [...paletteCatalog.presets, ...paletteCatalog.user_palettes].find(
+      (item) => item.id === state.paletteId,
+    );
+    els.palettePreview.replaceChildren();
+    if (!palette) {
+      els.palettePreview.textContent = "Sin selección: el asistente propondrá una paleta según tu descripción.";
+      return;
+    }
+    const copy = document.createElement("span");
+    copy.textContent = palette.description;
+    els.palettePreview.appendChild(copy);
+    const swatches = document.createElement("span");
+    swatches.className = "wizard-palette-swatches";
+    paletteCatalog.roles.forEach((role) => {
+      const swatch = document.createElement("span");
+      swatch.className = "wizard-palette-swatch";
+      const value = palette.variables[role.variable];
+      if (/^#[0-9a-f]{6}$/i.test(value || "")) swatch.style.backgroundColor = value;
+      swatch.title = role.label + " " + (value || "");
+      swatches.appendChild(swatch);
+    });
+    els.palettePreview.appendChild(swatches);
+  }
+
+  if (els.paletteSelect) {
+    paletteCatalog.presets.forEach((preset) => {
+      const option = document.createElement("option");
+      option.value = preset.id;
+      option.textContent = preset.name;
+      els.paletteSelect.appendChild(option);
+    });
+    if (paletteCatalog.user_palettes.length) {
+      const group = document.createElement("optgroup");
+      group.label = "Mis paletas";
+      paletteCatalog.user_palettes.forEach((palette) => {
+        const option = document.createElement("option");
+        option.value = palette.id;
+        option.textContent = palette.name;
+        group.appendChild(option);
+      });
+      els.paletteSelect.appendChild(group);
+    }
+    els.paletteSelect.addEventListener("change", () => {
+      state.paletteId = els.paletteSelect.value;
+      renderPalettePreview();
+    });
+    renderPalettePreview();
+  }
 
   function renderImageList() {
     if (!els.imageList) return;
     els.imageList.innerHTML = "";
-    state.assets.forEach((asset) => {
+    state.assets.forEach((asset, index) => {
+      const item = document.createElement("div");
+      item.className = "wizard-image-item";
       const img = document.createElement("img");
       img.src = asset.url;
-      img.alt = "";
-      els.imageList.appendChild(img);
+      img.alt = "Imagen cargada " + (index + 1);
+      item.appendChild(img);
+
+      const removeButton = document.createElement("button");
+      removeButton.type = "button";
+      removeButton.className = "wizard-image-remove";
+      removeButton.setAttribute("aria-label", "Quitar imagen " + (index + 1));
+      removeButton.textContent = "×";
+      removeButton.addEventListener("click", async () => {
+        removeButton.disabled = true;
+        try {
+          const response = await fetch(
+            "/api/user-templates/wizard-images/" + encodeURIComponent(asset.id) + "/",
+            {
+              method: "DELETE",
+              credentials: "same-origin",
+              headers: { "X-CSRFToken": getCsrfToken() },
+            },
+          );
+          if (!response.ok) throw new Error("delete failed");
+          state.assets.splice(index, 1);
+          renderImageList();
+        } catch (error) {
+          removeButton.disabled = false;
+          appendErrorBubble("No se pudo quitar la imagen. Intentá de nuevo.");
+        }
+      });
+      item.appendChild(removeButton);
+      els.imageList.appendChild(item);
     });
   }
 
@@ -277,7 +276,7 @@
       }
       const data = await response.json();
       state.assets.push({
-        id: "asset-" + data.id,
+        id: data.id,
         url: data.url,
         width: data.width,
         height: data.height,
@@ -344,12 +343,17 @@
 
   async function requestQuestions() {
     appendUserBubble(state.description);
-    const { done, error } = await postStream("/api/ai/wizard/questions/", {
+    const result = await postStream("/api/ai/wizard/questions/", {
       description: state.description,
       history: state.history,
     });
-    if (error) {
+    if (result.cancelled) return;
+    const { done, error } = result;
+    if (error || !done) {
       appendErrorBubble(errorMessage(error));
+      state.phase = "intro";
+      setComposerVisible(true);
+      els.input.focus();
       return;
     }
     state.questions = done.questions;
@@ -359,14 +363,18 @@
   }
 
   async function requestReview() {
-    const { done, error } = await postStream("/api/ai/wizard/review/", {
+    const result = await postStream("/api/ai/wizard/review/", {
       description: state.description,
       answers: state.answers,
       history: state.history,
     });
-    if (error) {
+    if (result.cancelled) return;
+    const { done, error } = result;
+    if (error || !done) {
       appendErrorBubble(errorMessage(error));
+      state.phase = "clarifying";
       setComposerVisible(true);
+      els.input.focus();
       return;
     }
     state.reviewRounds += 1;
@@ -384,14 +392,20 @@
   async function requestGenerate() {
     state.phase = "generating";
     appendAssistantBubble("¡Listo! Generando tu página…");
-    const { done, error } = await postStream("/api/ai/wizard/generate/", {
+    const result = await postStream("/api/ai/wizard/generate/", {
       description: state.description,
       answers: state.answers,
       history: state.history,
       assets: state.assets,
+      palette_id: state.paletteId || null,
     });
-    if (error) {
+    if (result.cancelled) return;
+    const { done, error } = result;
+    if (error || !done) {
       appendErrorBubble(errorMessage(error));
+      state.phase = "clarifying";
+      setComposerVisible(true);
+      els.input.focus();
       return;
     }
     renderSaveStep(done.name, done.summary, done.state);
@@ -411,10 +425,13 @@
     const nameField = document.createElement("div");
     nameField.className = "wizard-field";
     const nameLabel = document.createElement("label");
+    nameLabel.setAttribute("for", "wizard-template-name");
     nameLabel.textContent = "Nombre del template";
     nameField.appendChild(nameLabel);
     const nameInput = document.createElement("input");
+    nameInput.id = "wizard-template-name";
     nameInput.type = "text";
+    nameInput.autocomplete = "off";
     nameInput.value = name || "Mi template";
     nameField.appendChild(nameInput);
     bubble.appendChild(nameField);
@@ -496,6 +513,38 @@
   }
 
   els.send.addEventListener("click", handleComposerSend);
+  els.cancel.addEventListener("click", () => {
+    if (!activeRequestController) return;
+    activeRequestController.abort();
+    state.phase = state.description ? "clarifying" : "intro";
+    setComposerVisible(true);
+    setFormVisible(false);
+    appendAssistantBubble("Cancelé la solicitud. Podés ajustar la idea y volver a intentarlo.");
+    els.input.focus();
+  });
+  els.restart.addEventListener("click", () => {
+    if (activeRequestController) activeRequestController.abort();
+    state.description = "";
+    state.questions = [];
+    state.answers = {};
+    state.history = [];
+    state.reviewRounds = 0;
+    state.phase = "intro";
+    state.assets = [];
+    state.paletteId = "";
+    els.messages.innerHTML = "";
+    els.fields.innerHTML = "";
+    renderImageList();
+    setRequestState(false, "");
+    setFormVisible(false);
+    setComposerVisible(true);
+    els.input.value = "";
+    els.input.style.height = "auto";
+    if (els.paletteSelect) els.paletteSelect.value = "";
+    renderPalettePreview();
+    appendAssistantBubble("¿Qué página querés crear? Contame en tus palabras qué necesitás.");
+    els.input.focus();
+  });
   els.input.addEventListener("keydown", (event) => {
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();

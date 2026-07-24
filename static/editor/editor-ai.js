@@ -199,6 +199,7 @@
   };
 
   let requestInFlight = false;
+  let drawerRestoreFocusTarget = null;
 
   // Read the CSRF token Django set as a cookie (ensure_csrf_cookie on the view).
   function getCsrfToken() {
@@ -229,97 +230,17 @@
     return wrap;
   }
 
-  const TYPING_STATUS_MESSAGES = [
-    "Analizando tu página…",
-    "Pensando el diseño…",
-    "Generando los cambios…",
-    "Casi listo…",
-  ];
-  const TYPING_STATUS_INTERVAL_MS = 2200;
-  // A finished sentence: "." followed by a line break.
-  const REASONING_SENTENCE_RE = /\.\s*\n+/g;
-
-  // The model's <think> text sometimes drops into raw JSON/HTML while it
-  // plans an operation — that's implementation detail, not something a user
-  // reads as "thought", so those segments are filtered out of the live view.
-  function looksLikeCode(text) {
-    if (!text) return true;
-    if (/^[{[]/.test(text)) return true;
-    if (/"[a-zA-Z0-9_-]+"\s*:/.test(text)) return true;
-    if (/<\/?[a-z][a-z0-9-]*(\s[^>]*)?>/i.test(text)) return true;
-    return false;
-  }
-
-  // Returns { remove(), setReasoning(text) } instead of the raw element: once
-  // the backend streams real <think> text, setReasoning takes over the bubble
-  // from the canned status messages and shows it live, growing as it arrives.
   function appendTypingBubble() {
-    const wrap = document.createElement("div");
-    wrap.className = "ai-msg ai-msg-assistant ai-msg-typing";
-    const bubble = document.createElement("div");
-    bubble.className = "ai-bubble ai-bubble-assistant ai-typing";
-    bubble.setAttribute("aria-label", "El asistente está trabajando");
-
-    const dots = document.createElement("span");
-    dots.className = "ai-typing-dots";
-    dots.appendChild(document.createElement("span"));
-    dots.appendChild(document.createElement("span"));
-    dots.appendChild(document.createElement("span"));
-    bubble.appendChild(dots);
-
-    const status = document.createElement("span");
-    status.className = "ai-typing-status";
-    status.textContent = TYPING_STATUS_MESSAGES[0];
-    bubble.appendChild(status);
-
-    wrap.appendChild(bubble);
-    els.messages.appendChild(wrap);
-    scrollMessagesToBottom();
-
-    let index = 0;
-    let live = false;
-    let shownSentenceCount = 0;
-    const timer = setInterval(() => {
-      if (live) return;
-      index = (index + 1) % TYPING_STATUS_MESSAGES.length;
-      status.textContent = TYPING_STATUS_MESSAGES[index];
-    }, TYPING_STATUS_INTERVAL_MS);
-
-    // Swap the displayed sentence each time a new one finishes (a "." then a
-    // line break) — filters out anything that looks like JSON/HTML so the
-    // user only ever sees prose, not the model's scratch data structures.
-    function setReasoning(text) {
-      if (!text) return;
-      live = true;
-      bubble.classList.add("ai-typing-live");
-      status.classList.add("ai-typing-status-live");
-
-      const sentences = [];
-      let lastEnd = 0;
-      let match;
-      REASONING_SENTENCE_RE.lastIndex = 0;
-      while ((match = REASONING_SENTENCE_RE.exec(text)) !== null) {
-        sentences.push(text.slice(lastEnd, match.index + 1).trim());
-        lastEnd = REASONING_SENTENCE_RE.lastIndex;
-      }
-      if (sentences.length <= shownSentenceCount) return;
-
-      for (let i = sentences.length - 1; i >= shownSentenceCount; i--) {
-        if (!looksLikeCode(sentences[i])) {
-          status.textContent = sentences[i];
-          scrollMessagesToBottom();
-          break;
-        }
-      }
-      shownSentenceCount = sentences.length;
-    }
-
-    function remove() {
-      clearInterval(timer);
-      wrap.remove();
-    }
-
-    return { remove, setReasoning };
+    return global.AIStream.createTypingBubble({
+      messages: els.messages,
+      scrollToBottom: scrollMessagesToBottom,
+      statusMessages: [
+        "Analizando tu página…",
+        "Pensando el diseño…",
+        "Generando los cambios…",
+        "Casi listo…",
+      ],
+    });
   }
 
   function appendErrorBubble(message) {
@@ -514,55 +435,6 @@
   els.globalMode.addEventListener("change", updateContextChip);
   els.input.addEventListener("input", autoResizeInput);
 
-  function parseSseBlock(block) {
-    let eventName = "message";
-    let dataLine = null;
-    block.split("\n").forEach((line) => {
-      if (line.startsWith("event:")) eventName = line.slice(6).trim();
-      else if (line.startsWith("data:")) dataLine = line.slice(5).trim();
-    });
-    if (!dataLine) return null;
-    try {
-      return { event: eventName, data: JSON.parse(dataLine) };
-    } catch (err) {
-      return null;
-    }
-  }
-
-  // Reads the transform endpoint's SSE body as it arrives: calls
-  // onReasoning with the accumulated reasoning text on every "reasoning"
-  // chunk, and resolves once the terminal "done"/"error" event lands.
-  async function consumeTransformStream(response, onReasoning) {
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = "";
-    let reasoningSoFar = "";
-    let doneEvent = null;
-    let errorEvent = null;
-
-    while (true) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-      let separatorIndex;
-      while ((separatorIndex = buffer.indexOf("\n\n")) !== -1) {
-        const block = buffer.slice(0, separatorIndex);
-        buffer = buffer.slice(separatorIndex + 2);
-        const parsed = parseSseBlock(block);
-        if (!parsed) continue;
-        if (parsed.event === "reasoning") {
-          reasoningSoFar += parsed.data.text;
-          onReasoning(reasoningSoFar);
-        } else if (parsed.event === "done") {
-          doneEvent = parsed.data;
-        } else if (parsed.event === "error") {
-          errorEvent = parsed.data;
-        }
-      }
-    }
-    return { done: doneEvent, error: errorEvent };
-  }
-
   async function sendMessage() {
     if (requestInFlight) return;
     const instruction = els.input.value.trim();
@@ -619,7 +491,7 @@
         return;
       }
 
-      const { done: doneEvent, error: errorEvent } = await consumeTransformStream(
+      const { done: doneEvent, error: errorEvent } = await global.AIStream.consume(
         response,
         (reasoningSoFar) => typingBubble.setReasoning(reasoningSoFar)
       );
@@ -685,12 +557,21 @@
   });
 
   function openDrawer() {
+    drawerRestoreFocusTarget = document.activeElement !== document.body ? document.activeElement : null;
     els.drawer.classList.remove("hidden");
+    els.drawer.setAttribute("aria-hidden", "false");
+    els.fab.setAttribute("aria-expanded", "true");
     els.input.focus();
   }
 
   function closeDrawer() {
     els.drawer.classList.add("hidden");
+    els.drawer.setAttribute("aria-hidden", "true");
+    els.fab.setAttribute("aria-expanded", "false");
+    if (drawerRestoreFocusTarget && document.contains(drawerRestoreFocusTarget)) {
+      drawerRestoreFocusTarget.focus();
+    }
+    drawerRestoreFocusTarget = null;
   }
 
   els.fab.addEventListener("click", () => {
@@ -704,8 +585,27 @@
   els.drawerClose.addEventListener("click", closeDrawer);
 
   document.addEventListener("keydown", (event) => {
-    if (event.key === "Escape" && !els.drawer.classList.contains("hidden")) {
+    if (els.drawer.classList.contains("hidden")) return;
+    if (event.key === "Escape") {
+      event.preventDefault();
       closeDrawer();
+      return;
+    }
+    if (event.key !== "Tab") return;
+    const focusable = focusableElements(els.drawer);
+    if (!focusable.length) {
+      event.preventDefault();
+      els.drawerClose.focus();
+      return;
+    }
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
     }
   });
 
@@ -764,27 +664,75 @@
     if (target) target.click();
   }
 
-  // Two hidden modals share one backdrop: #elementModal (inspector + structure,
-  // opened by the floating ✎ button) and #sectionModal (content/design/seo/json
-  // tabs, opened from the preview toolbar's section-open buttons).
+  // All editor dialogs share one backdrop and one keyboard/focus policy. Keeping
+  // this here avoids save-template.js and editor-core.js each growing their own
+  // slightly different modal implementation.
   const elementModal = document.getElementById("elementModal");
   const sectionModal = document.getElementById("sectionModal");
   const paymentLinkModal = document.getElementById("paymentLinkModal");
   const imagePickerModal = document.getElementById("imagePickerModal");
+  const saveTemplateModal = document.getElementById("saveTemplateModal");
   const editorBackdrop = document.getElementById("editorModalBackdrop");
-  function closeAllModals() {
-    if (elementModal) elementModal.classList.add("hidden");
-    if (sectionModal) sectionModal.classList.add("hidden");
-    if (paymentLinkModal) paymentLinkModal.classList.add("hidden");
-    if (imagePickerModal) imagePickerModal.classList.add("hidden");
+  const modalElements = [
+    elementModal,
+    sectionModal,
+    paymentLinkModal,
+    imagePickerModal,
+    saveTemplateModal
+  ].filter(Boolean);
+  let activeModal = null;
+  let restoreFocusTarget = null;
+
+  function focusableElements(container) {
+    return [...container.querySelectorAll(
+      'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+    )].filter(element => {
+      const style = window.getComputedStyle(element);
+      return style.display !== "none" && style.visibility !== "hidden";
+    });
+  }
+
+  function setModalVisibility(modal, visible) {
+    modal.classList.toggle("hidden", !visible);
+    modal.setAttribute("aria-hidden", String(!visible));
+  }
+
+  function closeAllModals({ restoreFocus = true } = {}) {
+    modalElements.forEach(modal => {
+      setModalVisibility(modal, false);
+      document.querySelectorAll(`[aria-controls="${modal.id}"]`).forEach(trigger => {
+        trigger.setAttribute("aria-expanded", "false");
+      });
+    });
     if (editorBackdrop) editorBackdrop.classList.add("hidden");
+    const target = restoreFocus ? restoreFocusTarget : null;
+    activeModal = null;
+    restoreFocusTarget = null;
+    if (target && document.contains(target) && !target.disabled) target.focus();
   }
-  global.EditorModals = { closeAll: closeAllModals, open: openModal };
-  function openModal(el) {
-    closeAllModals();
-    if (el) el.classList.remove("hidden");
+
+  function openModal(el, trigger = document.activeElement) {
+    if (!el) return;
+    closeAllModals({ restoreFocus: false });
+    modalElements.forEach(modal => setModalVisibility(modal, modal === el));
     if (editorBackdrop) editorBackdrop.classList.remove("hidden");
+    activeModal = el;
+    restoreFocusTarget = trigger && trigger !== document.body ? trigger : null;
+    if (restoreFocusTarget && restoreFocusTarget.setAttribute) {
+      restoreFocusTarget.setAttribute("aria-controls", el.id);
+      restoreFocusTarget.setAttribute("aria-expanded", "true");
+    }
+    const firstFocusable = focusableElements(el)[0];
+    if (firstFocusable) firstFocusable.focus();
   }
+
+  global.EditorModals = {
+    closeAll: closeAllModals,
+    open: openModal,
+    isOpen: () => Boolean(activeModal),
+    getActive: () => activeModal
+  };
+
   function openEditorModal() {
     openModal(elementModal);
   }
@@ -800,19 +748,36 @@
   if (paymentLinkClose) paymentLinkClose.addEventListener("click", closeAllModals);
   const imagePickerClose = document.getElementById("imagePickerModalClose");
   if (imagePickerClose) imagePickerClose.addEventListener("click", closeAllModals);
-  if (editorBackdrop) editorBackdrop.addEventListener("click", closeAllModals);
+  if (editorBackdrop) editorBackdrop.addEventListener("click", () => closeAllModals());
   document.querySelectorAll(".section-open").forEach((btn) => {
     btn.addEventListener("click", () => {
       clickTab(btn.dataset.section);
-      openModal(sectionModal);
+      btn.setAttribute("aria-expanded", "true");
+      openModal(sectionModal, btn);
     });
   });
   document.addEventListener("keydown", (e) => {
-    const anyOpen =
-      (elementModal && !elementModal.classList.contains("hidden")) ||
-      (sectionModal && !sectionModal.classList.contains("hidden"));
-    if (e.key === "Escape" && anyOpen) {
+    if (!activeModal) return;
+    if (e.key === "Escape") {
+      e.preventDefault();
       closeAllModals();
+      return;
+    }
+    if (e.key !== "Tab") return;
+    const focusable = focusableElements(activeModal);
+    if (!focusable.length) {
+      e.preventDefault();
+      activeModal.focus();
+      return;
+    }
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (e.shiftKey && document.activeElement === first) {
+      e.preventDefault();
+      last.focus();
+    } else if (!e.shiftKey && document.activeElement === last) {
+      e.preventDefault();
+      first.focus();
     }
   });
 

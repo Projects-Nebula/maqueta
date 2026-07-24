@@ -4,6 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Crear template con IA</title>
+  <link rel="stylesheet" href="{% static 'shared/tokens.css' %}">
+  <link rel="stylesheet" href="{% static 'shared/feedback.css' %}">
   <link rel="stylesheet" href="{% static 'editor/editor.css' %}">
   <link rel="stylesheet" href="{% static 'editor/wizard.css' %}">
 </head>
@@ -12,9 +14,24 @@
     <header class="wizard-topbar">
       <a class="wizard-back" href="{% url 'editor:home' %}">← Volver</a>
       <h1>Crear mi propio template</h1>
+      <button class="btn small wizard-restart" id="wizardRestart" type="button">Reiniciar</button>
     </header>
 
     <main class="wizard-panel">
+      <section class="wizard-palette" aria-labelledby="wizardPaletteTitle">
+        <div>
+          <h2 id="wizardPaletteTitle">Define el estilo visual</h2>
+          <p>Podés elegir una paleta base; el contenido y la estructura los crea el asistente.</p>
+        </div>
+        <label class="wizard-palette-field" for="wizardPaletteSelect">
+          <span>Preset o paleta guardada</span>
+          <select id="wizardPaletteSelect">
+            <option value="">El asistente decide</option>
+          </select>
+        </label>
+        <div class="wizard-palette-preview" id="wizardPalettePreview" aria-live="polite"></div>
+      </section>
+
       <div class="ai-messages wizard-messages" id="wizardMessages"></div>
 
       <form class="wizard-question-form hidden" id="wizardQuestionForm">
@@ -23,6 +40,7 @@
         <div class="wizard-images">
           <label class="btn small" for="wizardImageInput">+ Agregar imagen</label>
           <input type="file" id="wizardImageInput" accept="image/*" class="hidden">
+          <small class="wizard-image-help">PNG, JPG o WebP. Hasta 20 imágenes; podés quitarlas antes de generar.</small>
           <div class="wizard-image-list" id="wizardImageList"></div>
         </div>
 
@@ -30,17 +48,24 @@
       </form>
 
       <div class="ai-composer wizard-composer" id="wizardComposer">
+        <label class="sr-only" for="wizardInput">Descripción de la página</label>
         <textarea
           class="ai-composer-input"
           id="wizardInput"
           rows="1"
           placeholder="Describí la página que querés crear…"
         ></textarea>
-        <button class="ai-composer-send" id="wizardSend" type="button" title="Enviar">➤</button>
+        <button class="ai-composer-send" id="wizardSend" type="button" title="Enviar" aria-label="Enviar descripción">➤</button>
+      </div>
+      <div class="wizard-request-status" id="wizardRequestStatus" aria-live="polite">
+        <span id="wizardRequestMessage"></span>
+        <button class="btn small hidden" id="wizardCancel" type="button">Cancelar solicitud</button>
       </div>
     </main>
   </div>
 
+  {{ palette_catalog|json_script:"palette-catalog" }}
+  <script src="{% static 'shared/ai-stream.js' %}"></script>
   <script src="{% static 'editor/template-wizard.js' %}"></script>
 </body>
 </html>

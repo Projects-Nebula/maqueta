@@ -32,7 +32,24 @@
   var userTemplateId = document.body.dataset.userTemplateId || "";
   var historyOpen = false;
 
+  function notify(message, tone) {
+    if (window.EditorCore && window.EditorCore.showToast) {
+      window.EditorCore.showToast(message, tone || "error");
+    } else {
+      var fallback = document.getElementById("toast");
+      if (fallback) {
+        fallback.textContent = message;
+        fallback.dataset.tone = tone || "error";
+        fallback.classList.add("visible");
+      }
+    }
+  }
+
   function closeModal() {
+    if (window.EditorModals) {
+      window.EditorModals.closeAll();
+      return;
+    }
     modal.classList.add("hidden");
     if (backdrop) backdrop.classList.add("hidden");
   }
@@ -75,12 +92,12 @@
         { method: "POST", credentials: "same-origin", headers: { "X-CSRFToken": getCsrfToken() } }
       );
       if (!response.ok) {
-        alert("No se pudo actualizar el estado de publicación.");
+        notify("No se pudo actualizar el estado de publicación.");
         return;
       }
       renderPublishState(await response.json());
     } catch (e) {
-      alert("No se pudo actualizar el estado de publicación.");
+      notify("No se pudo actualizar el estado de publicación.");
     }
   }
 
@@ -92,8 +109,12 @@
     historyList.classList.add("hidden");
     historyList.innerHTML = "";
     nameInput.value = "";
-    modal.classList.remove("hidden");
-    if (backdrop) backdrop.classList.remove("hidden");
+    if (window.EditorModals) {
+      window.EditorModals.open(modal, saveButton);
+    } else {
+      modal.classList.remove("hidden");
+      if (backdrop) backdrop.classList.remove("hidden");
+    }
     nameInput.focus();
   }
 
@@ -152,12 +173,12 @@
         }
       );
       if (!response.ok) {
-        alert("No se pudo eliminar la versión.");
+        notify("No se pudo eliminar la versión.");
         return;
       }
       loadHistory();
     } catch (e) {
-      alert("No se pudo eliminar la versión.");
+      notify("No se pudo eliminar la versión.");
     }
   }
 
@@ -191,14 +212,14 @@
         body: JSON.stringify({ state: rev.state }),
       });
       if (!response.ok) {
-        alert("No se pudo restaurar la versión.");
+        notify("No se pudo restaurar la versión.");
         return;
       }
       window.EditorCore.commitProposal(rev.state);
       closeModal();
-      alert("Versión v" + rev.version + " restaurada.");
+      notify("Versión v" + rev.version + " restaurada.", "success");
     } catch (e) {
-      alert("No se pudo restaurar la versión.");
+      notify("No se pudo restaurar la versión.");
     }
   }
 
@@ -218,7 +239,12 @@
     }
   });
 
-  async function submit(url, method, body) {
+  async function submit(url, method, body, button) {
+    if (button) {
+      button.disabled = true;
+      button.dataset.originalLabel = button.textContent;
+      button.textContent = "Guardando…";
+    }
     try {
       var response = await fetch(url, {
         method: method,
@@ -232,22 +258,26 @@
       if (response.ok) {
         window.location.href = "/gallery/";
       } else {
-        alert("No se pudo guardar el template.");
+        notify("No se pudo guardar el template.");
       }
     } catch (e) {
-      alert("No se pudo guardar el template.");
+      notify("No se pudo guardar el template.");
+    } finally {
+      if (button) {
+        button.disabled = false;
+        button.textContent = button.dataset.originalLabel || button.textContent;
+      }
     }
   }
 
   saveButton.addEventListener("click", openModal);
   closeBtn.addEventListener("click", closeModal);
-  if (backdrop) backdrop.addEventListener("click", closeModal);
 
   updateBtn.addEventListener("click", function () {
     if (!userTemplateId) return;
     submit("/api/user-templates/" + encodeURIComponent(userTemplateId) + "/", "PATCH", {
       state: window.EditorCore.getState(),
-    });
+    }, updateBtn);
   });
 
   createBtn.addEventListener("click", function () {
@@ -256,7 +286,7 @@
       nameInput.focus();
       return;
     }
-    submit("/api/user-templates/", "POST", { name: name, state: window.EditorCore.getState() });
+    submit("/api/user-templates/", "POST", { name: name, state: window.EditorCore.getState() }, createBtn);
   });
 
   // Publish/unpublish live as their own topbar buttons (not inside the

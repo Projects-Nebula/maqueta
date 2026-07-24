@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Visual JSON Page Builder</title>
+  <link rel="stylesheet" href="{% static 'shared/tokens.css' %}">
   <link rel="stylesheet" href="{% static 'editor/editor.css' %}">
 </head>
 <body data-user-template-id="{{ user_template_id|default:'' }}" data-project-id="{{ project_id|default:'' }}">
@@ -17,26 +18,30 @@
         </div>
       </div>
 
+      <a class="btn editor-exit" href="{% url 'editor:gallery' %}" aria-label="Salir del editor" title="Salir del editor">← <span>Salir</span></a>
+
       <div class="topbar-spacer"></div>
 
       <div class="action-group">
-        <button class="btn" id="undoButton" type="button" title="Deshacer (Ctrl/Cmd + Z)" disabled>↶ Deshacer</button>
-        <button class="btn" id="redoButton" type="button" title="Rehacer (Ctrl/Cmd + Shift + Z)" disabled>↷ Rehacer</button>
-        <button class="btn" id="importButton" type="button">↥ Importar JSON</button>
-        <button class="btn" id="copyButton" type="button">⧉ Copiar JSON</button>
-        <button class="btn success" id="saveTemplateButton" type="button">☆ Guardar</button>
+        <button class="btn" id="undoButton" type="button" title="Deshacer (Ctrl/Cmd + Z)" aria-label="Deshacer" disabled>↶ <span class="btn-label">Deshacer</span></button>
+        <button class="btn" id="redoButton" type="button" title="Rehacer (Ctrl/Cmd + Shift + Z)" aria-label="Rehacer" disabled>↷ <span class="btn-label">Rehacer</span></button>
+        <button class="btn" id="importButton" type="button" aria-label="Importar JSON">↥ <span class="btn-label">Importar JSON</span></button>
+        <button class="btn" id="copyButton" type="button" aria-label="Copiar JSON">⧉ <span class="btn-label">Copiar JSON</span></button>
+        <button class="btn success" id="saveTemplateButton" type="button" aria-controls="saveTemplateModal" aria-expanded="false">☆ <span class="btn-label">Guardar</span></button>
         <button class="btn success hidden" id="saveTemplatePublishBtn" type="button">Publicar</button>
         <button class="btn small hidden" id="saveTemplateUnpublishBtn" type="button">Despublicar</button>
-        <button class="btn primary" id="downloadButton" type="button">↓ Descargar JSON</button>
+        <button class="btn primary" id="downloadButton" type="button" aria-label="Descargar JSON">↓ <span class="btn-label">Descargar JSON</span></button>
         <input class="hidden" id="fileInput" type="file" accept=".json,application/json">
       </div>
     </header>
     <p id="saveTemplatePublicUrl" class="panel-help hidden" style="margin:0; padding:6px 24px; text-align:right;"></p>
 
     <main class="workspace">
-      <div id="editorModalBackdrop" class="editor-modal-backdrop hidden"></div>
-      <section class="editor-shell panel-modal hidden" id="elementModal" role="dialog" aria-modal="true" aria-label="Editor del elemento">
+      <div id="editorModalBackdrop" class="editor-modal-backdrop hidden" aria-hidden="true"></div>
+      <section class="editor-shell panel-modal hidden" id="elementModal" role="dialog" aria-modal="true" aria-labelledby="elementModalTitle" aria-describedby="elementModalHelp" aria-hidden="true">
         <button id="editorModalClose" class="editor-modal-close" type="button" aria-label="Cerrar editor">×</button>
+        <h2 id="elementModalTitle" class="sr-only">Editor del elemento</h2>
+        <p id="elementModalHelp" class="sr-only">Edita el elemento seleccionado y aplica los cambios en la vista previa.</p>
 
         <div class="inspector-shell">
           <div id="inspector">
@@ -61,16 +66,18 @@
         </div>
       </section>
 
-      <section class="section-modal panel-modal hidden" id="sectionModal" role="dialog" aria-modal="true" aria-label="Secciones de la página">
+      <section class="section-modal panel-modal hidden" id="sectionModal" role="dialog" aria-modal="true" aria-labelledby="sectionModalTitle" aria-describedby="sectionModalHelp" aria-hidden="true">
         <button id="sectionModalClose" class="editor-modal-close" type="button" aria-label="Cerrar">×</button>
+        <h2 id="sectionModalTitle" class="sr-only">Editor de secciones</h2>
+        <p id="sectionModalHelp" class="sr-only">Elegí una sección, ajustá el diseño o editá el documento avanzado.</p>
         <nav class="tabs hidden" aria-label="Secciones del editor">
-          <button class="tab active" data-tab="content" type="button">Contenido</button>
-          <button class="tab" data-tab="design" type="button">Diseño</button>
-          <button class="tab" data-tab="seo" type="button">SEO</button>
-          <button class="tab" data-tab="json" type="button">JSON avanzado</button>
+          <button class="tab active" id="editorTabContent" data-tab="content" role="tab" aria-selected="true" aria-controls="editorPanelContent" type="button">Contenido</button>
+          <button class="tab" id="editorTabDesign" data-tab="design" role="tab" aria-selected="false" aria-controls="editorPanelDesign" type="button">Diseño</button>
+          <button class="tab" id="editorTabSeo" data-tab="seo" role="tab" aria-selected="false" aria-controls="editorPanelSeo" type="button">SEO</button>
+          <button class="tab" id="editorTabJson" data-tab="json" role="tab" aria-selected="false" aria-controls="editorPanelJson" type="button">JSON avanzado</button>
         </nav>
 
-        <section class="tab-panel active" data-panel="content">
+        <section class="tab-panel active" id="editorPanelContent" role="tabpanel" aria-labelledby="editorTabContent" data-panel="content">
           <h2 class="panel-title">Contenido rápido</h2>
           <p class="panel-help">Agrega secciones prediseñadas y luego personalízalas desde la pestaña Estructura.</p>
 
@@ -124,9 +131,40 @@
           </div>
         </section>
 
-        <section class="tab-panel" data-panel="design">
+        <section class="tab-panel" id="editorPanelDesign" role="tabpanel" aria-labelledby="editorTabDesign" data-panel="design">
           <h2 class="panel-title">Diseño global</h2>
           <p class="panel-help">Cambia los colores, tipografía y dimensiones principales. La vista previa se actualiza inmediatamente.</p>
+
+          <div class="section-card palette-card">
+            <div class="palette-card-heading">
+              <div>
+                <h3>Paleta de colores</h3>
+                <p class="field-help">Elegí un preset o ajustá los cuatro roles que usa tu página.</p>
+              </div>
+              <span class="palette-status" id="paletteStatus">Personalizada</span>
+            </div>
+            <div class="form-grid two">
+              <label class="field">
+                <span>Preset o paleta guardada</span>
+                <select class="control" id="palettePresetSelect" aria-describedby="paletteDescription">
+                  <option value="custom">Personalizada</option>
+                  <option value="ai">Generada por IA</option>
+                </select>
+              </label>
+              <label class="field">
+                <span>Nombre de la paleta</span>
+                <input class="control" id="paletteName" type="text" maxlength="80" placeholder="Mi paleta">
+              </label>
+            </div>
+            <p class="palette-description" id="paletteDescription"></p>
+            <div class="palette-swatches" id="paletteSwatches" role="list" aria-label="Muestra de colores activos"></div>
+            <p class="palette-feedback" id="paletteContrast" role="status" aria-live="polite"></p>
+            <div class="inline-actions palette-actions">
+              <button class="btn small" id="paletteSaveButton" type="button">Guardar en mis paletas</button>
+              <button class="btn small danger" id="paletteDeleteButton" type="button" hidden>Eliminar paleta guardada</button>
+              <button class="btn small" id="paletteResetButton" type="button">Restablecer paleta</button>
+            </div>
+          </div>
 
           <div class="section-card">
             <h3>Colores</h3>
@@ -158,7 +196,7 @@
           </div>
         </section>
 
-        <section class="tab-panel" data-panel="seo">
+        <section class="tab-panel" id="editorPanelSeo" role="tabpanel" aria-labelledby="editorTabSeo" data-panel="seo">
           <h2 class="panel-title">SEO y documento</h2>
           <p class="panel-help">Configura la información que usan los buscadores, navegadores y lectores de pantalla.</p>
 
@@ -194,7 +232,7 @@
           </div>
         </section>
 
-        <section class="tab-panel" data-panel="json">
+        <section class="tab-panel" id="editorPanelJson" role="tabpanel" aria-labelledby="editorTabJson" data-panel="json">
           <h2 class="panel-title">JSON avanzado</h2>
           <p class="panel-help">Este modo es opcional. Puedes editar directamente el documento y aplicar los cambios cuando sea válido.</p>
           <textarea class="json-editor" id="jsonEditor" spellcheck="false"></textarea>
@@ -206,29 +244,31 @@
         </section>
       </section>
 
-      <section class="panel-modal ai-save-modal hidden" id="paymentLinkModal" role="dialog" aria-modal="true" aria-label="Vincular producto">
+      <section class="panel-modal ai-save-modal hidden" id="paymentLinkModal" role="dialog" aria-modal="true" aria-labelledby="paymentLinkModalTitle" aria-describedby="paymentLinkModalHelp" aria-hidden="true">
         <button id="paymentLinkModalClose" class="editor-modal-close" type="button" aria-label="Cerrar">×</button>
-        <h2 class="panel-title">Vincular producto</h2>
-        <p class="panel-help">Elegí a qué producto debe apuntar este botón (creá productos en <a href="/productos/" target="_blank" rel="noopener">Mis productos</a>).</p>
+        <h2 class="panel-title" id="paymentLinkModalTitle">Vincular producto</h2>
+        <p class="panel-help" id="paymentLinkModalHelp">Elegí a qué producto debe apuntar este botón (creá productos en <a href="/productos/" target="_blank" rel="noopener">Mis productos</a>).</p>
         <select class="control" id="paymentLinkProductSelect"></select>
         <button class="btn success" id="paymentLinkConfirmBtn" type="button">Vincular</button>
       </section>
 
-      <section class="panel-modal ai-save-modal hidden" id="imagePickerModal" role="dialog" aria-modal="true" aria-label="Elegir imagen">
+      <section class="panel-modal ai-save-modal hidden" id="imagePickerModal" role="dialog" aria-modal="true" aria-labelledby="imagePickerModalTitle" aria-describedby="imagePickerModalHelp" aria-hidden="true">
         <button id="imagePickerModalClose" class="editor-modal-close" type="button" aria-label="Cerrar">×</button>
-        <h2 class="panel-title">Imagen</h2>
+        <h2 class="panel-title" id="imagePickerModalTitle">Imagen</h2>
+        <p class="panel-help" id="imagePickerModalHelp">Elegí una imagen guardada, subí un archivo o pegá una URL.</p>
         <nav class="tabs" aria-label="Origen de la imagen">
-          <button class="tab active" data-image-tab="saved" type="button">Guardadas</button>
-          <button class="tab" data-image-tab="upload" type="button">Subir</button>
-          <button class="tab" data-image-tab="url" type="button">URL</button>
+          <button class="tab active" id="imageTabSaved" data-image-tab="saved" role="tab" aria-selected="true" aria-controls="imagePanelSaved" type="button">Guardadas</button>
+          <button class="tab" id="imageTabUpload" data-image-tab="upload" role="tab" aria-selected="false" aria-controls="imagePanelUpload" type="button">Subir</button>
+          <button class="tab" id="imageTabUrl" data-image-tab="url" role="tab" aria-selected="false" aria-controls="imagePanelUrl" type="button">URL</button>
         </nav>
-        <div class="tab-panel active" data-image-panel="saved">
+        <div class="tab-panel active" id="imagePanelSaved" role="tabpanel" aria-labelledby="imageTabSaved" data-image-panel="saved">
           <div class="preset-grid" id="imagePickerSavedGrid"></div>
         </div>
-        <div class="tab-panel" data-image-panel="upload">
+        <div class="tab-panel" id="imagePanelUpload" role="tabpanel" aria-labelledby="imageTabUpload" data-image-panel="upload">
+          <p class="panel-help">PNG, JPG o WebP. Elegí una imagen para reemplazar la seleccionada.</p>
           <input class="control" id="imagePickerUploadInput" type="file" accept="image/png,image/jpeg,image/webp">
         </div>
-        <div class="tab-panel" data-image-panel="url">
+        <div class="tab-panel" id="imagePanelUrl" role="tabpanel" aria-labelledby="imageTabUrl" data-image-panel="url">
           <label class="field">
             <span>URL de la imagen</span>
             <input class="control" id="imagePickerUrlInput" type="text" placeholder="https://...">
@@ -237,9 +277,10 @@
         </div>
       </section>
 
-      <section class="panel-modal ai-save-modal hidden" id="saveTemplateModal" role="dialog" aria-modal="true" aria-label="Guardar template">
+      <section class="panel-modal ai-save-modal hidden" id="saveTemplateModal" role="dialog" aria-modal="true" aria-labelledby="saveTemplateModalTitle" aria-describedby="saveTemplateModalHelp" aria-hidden="true">
         <button id="saveTemplateModalClose" class="editor-modal-close" type="button" aria-label="Cerrar">×</button>
-        <h2 class="panel-title">Guardar template</h2>
+        <h2 class="panel-title" id="saveTemplateModalTitle">Guardar template</h2>
+        <p class="panel-help" id="saveTemplateModalHelp">Guardá una copia del documento actual o actualizá el template que abriste.</p>
         <div class="inline-actions">
           <button id="saveTemplateUpdateBtn" class="btn primary hidden" type="button">Actualizar este template</button>
           <button id="saveTemplateHistoryToggle" class="btn small hidden" type="button">Historial ▾</button>
@@ -257,17 +298,17 @@
         <div class="preview-toolbar">
           <span class="preview-title">Vista previa</span>
           <div class="section-openers">
-            <button class="btn small section-open" type="button" data-section="content">Contenido</button>
-            <button class="btn small section-open" type="button" data-section="design">Diseño</button>
-            <button class="btn small section-open" type="button" data-section="seo">SEO</button>
-            <button class="btn small section-open" type="button" data-section="json">JSON avanzado</button>
+            <button class="btn small section-open" type="button" data-section="content" aria-controls="sectionModal" aria-expanded="false">Contenido</button>
+            <button class="btn small section-open" type="button" data-section="design" aria-controls="sectionModal" aria-expanded="false">Diseño</button>
+            <button class="btn small section-open" type="button" data-section="seo" aria-controls="sectionModal" aria-expanded="false">SEO</button>
+            <button class="btn small section-open" type="button" data-section="json" aria-controls="sectionModal" aria-expanded="false">JSON avanzado</button>
           </div>
           <span class="preview-status"><span class="status-dot"></span>En vivo</span>
 
-          <div class="device-switcher" aria-label="Tamaño de vista previa">
-            <button class="device-button active" data-device="desktop" title="Escritorio" type="button">▰</button>
-            <button class="device-button" data-device="tablet" title="Tablet" type="button">▯</button>
-            <button class="device-button" data-device="mobile" title="Móvil" type="button">▯</button>
+          <div class="device-switcher" role="group" aria-label="Tamaño de vista previa">
+            <button class="device-button active" data-device="desktop" aria-label="Vista de escritorio" aria-pressed="true" title="Escritorio" type="button">▰</button>
+            <button class="device-button" data-device="tablet" aria-label="Vista de tablet" aria-pressed="false" title="Tablet" type="button">▯</button>
+            <button class="device-button" data-device="mobile" aria-label="Vista móvil" aria-pressed="false" title="Móvil" type="button">▯</button>
           </div>
         </div>
 
@@ -279,13 +320,14 @@
       </section>
     </main>
 
-    <button class="ai-fab" id="aiFab" type="button" aria-label="Asistente IA">✦ IA</button>
+    <button class="ai-fab" id="aiFab" type="button" aria-label="Asistente IA" aria-controls="aiDrawer" aria-expanded="false">✦ IA</button>
 
-    <div class="ai-drawer hidden" id="aiDrawer" role="dialog" aria-label="Asistente IA">
+    <div class="ai-drawer hidden" id="aiDrawer" role="dialog" aria-modal="true" aria-labelledby="aiDrawerTitle" aria-describedby="aiDrawerHelp" aria-hidden="true">
       <div class="ai-drawer-header">
-        <h2 class="panel-title">Asistente IA</h2>
+        <h2 class="panel-title" id="aiDrawerTitle">Asistente IA</h2>
         <button class="ai-drawer-close" id="aiDrawerClose" type="button" aria-label="Cerrar">×</button>
       </div>
+      <p class="sr-only" id="aiDrawerHelp">Escribí una instrucción para proponer cambios en la página.</p>
 
       <div class="ai-context-bar">
         <span id="aiContextChip" class="ai-context-chip">Ningún elemento seleccionado.</span>
@@ -305,7 +347,7 @@
     </div>
   </div>
 
-  <div class="toast" id="toast"></div>
+  <div class="toast" id="toast" role="status" aria-live="polite" aria-atomic="true"></div>
 
   <script id="editor-config" type="application/json">
     {
@@ -315,8 +357,10 @@
     }
   </script>
 
+  {{ palette_catalog|json_script:"palette-catalog" }}
   {{ template_state|json_script:"template-seed" }}
 
+  <script src="{% static 'shared/ai-stream.js' %}"></script>
   <script src="{% static 'editor/editor-core.js' %}"></script>
   <script src="{% static 'editor/editor-ai.js' %}"></script>
   <script src="{% static 'editor/save-template.js' %}"></script>

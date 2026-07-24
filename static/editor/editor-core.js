@@ -1,6 +1,34 @@
     (() => {
       "use strict";
 
+      const paletteCatalog = (() => {
+        const element = document.getElementById("palette-catalog");
+        if (!element) return { roles: [], presets: [], user_palettes: [] };
+        try {
+          const parsed = JSON.parse(element.textContent || "{}");
+          return {
+            roles: Array.isArray(parsed.roles) ? parsed.roles : [],
+            presets: Array.isArray(parsed.presets) ? parsed.presets : [],
+            user_palettes: Array.isArray(parsed.user_palettes) ? parsed.user_palettes : []
+          };
+        } catch {
+          return { roles: [], presets: [], user_palettes: [] };
+        }
+      })();
+
+      // The server catalog is the source of truth. This fallback only keeps
+      // the standalone editor shell usable in fixture pages without context.
+      const paletteRoles = paletteCatalog.roles.length
+        ? paletteCatalog.roles
+        : [
+            { id: "primary", variable: "--color-primary", label: "Principal" },
+            { id: "background", variable: "--color-background", label: "Fondo" },
+            { id: "text", variable: "--color-text", label: "Texto" },
+            { id: "surface", variable: "--color-surface", label: "Superficie" }
+          ];
+      const palettePresets = paletteCatalog.presets;
+      const userPalettes = paletteCatalog.user_palettes;
+
       const defaultPage = {
         schemaVersion: "2.0",
         settings: {
@@ -775,6 +803,7 @@
       };
 
       let state = clone(defaultPage);
+      let paletteBaseline = null;
       let selectedPath = null;
       let toastTimer = null;
       let previewReady = false;
@@ -800,8 +829,8 @@
       let previewDropCommitted = false;
 
       const els = {
-        tabs: [...document.querySelectorAll(".tab")],
-        panels: [...document.querySelectorAll(".tab-panel")],
+        tabs: [...document.querySelectorAll(".tab[data-tab]")],
+        panels: [...document.querySelectorAll(".tab-panel[data-panel]")],
         previewFrame: document.getElementById("previewFrame"),
         previewWrap: document.getElementById("previewWrap"),
         tree: document.getElementById("tree"),
@@ -813,6 +842,349 @@
         undoButton: document.getElementById("undoButton"),
         redoButton: document.getElementById("redoButton")
       };
+
+      function ensureStyleShape(target) {
+        if (!target.styles || typeof target.styles !== "object" || Array.isArray(target.styles)) {
+          target.styles = {};
+        }
+        if (
+          !target.styles.variables ||
+          typeof target.styles.variables !== "object" ||
+          Array.isArray(target.styles.variables)
+        ) {
+          target.styles.variables = {};
+        }
+        if (!Array.isArray(target.styles.rules)) target.styles.rules = [];
+        if (!Array.isArray(target.styles.mediaQueries)) target.styles.mediaQueries = [];
+        if (!Array.isArray(target.styles.keyframes)) target.styles.keyframes = [];
+        return target;
+      }
+
+      function capturePaletteSnapshot(sourceState = state) {
+        ensureStyleShape(sourceState);
+        const variables = {};
+        paletteRoles.forEach(role => {
+          if (sourceState.styles.variables[role.variable] !== undefined) {
+            variables[role.variable] = sourceState.styles.variables[role.variable];
+          }
+        });
+        return {
+          variables,
+          palette: sourceState.styles.palette ? clone(sourceState.styles.palette) : null
+        };
+      }
+
+      function isHexColor(value) {
+        return typeof value === "string" && /^#[0-9a-f]{6}$/i.test(value.trim());
+      }
+
+      function getPalettePreset(id) {
+        return palettePresets.find(preset => preset.id === id) || null;
+      }
+
+      function getUserPalette(id) {
+        return userPalettes.find(palette => palette.id === id) || null;
+      }
+
+      function paletteValuesMatch(preset, variables) {
+        return paletteRoles.every(role => variables[role.variable] === preset.variables[role.variable]);
+      }
+
+      function paletteSlug(value) {
+        const slug = String(value || "")
+          .normalize("NFD")
+          .replace(/[\u0300-\u036f]/g, "")
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, "-")
+          .replace(/^-+|-+$/g, "")
+          .slice(0, 56);
+        return slug || "custom";
+      }
+
+      function currentPaletteDescriptor() {
+        ensureStyleShape(state);
+        const variables = state.styles.variables;
+        const metadata = state.styles.palette;
+        if (metadata?.source === "preset") {
+          const preset = getPalettePreset(metadata.id);
+          if (preset && paletteValuesMatch(preset, variables)) return preset;
+        }
+        if (metadata?.source === "ai") {
+          return {
+            id: "ai",
+            name: metadata.name || "Generada por IA",
+            description: "Colores generados para esta página por el asistente.",
+            source: "ai",
+            variables
+          };
+        }
+        if (metadata?.source === "custom") {
+          const saved = getUserPalette(metadata.id);
+          if (saved && paletteValuesMatch(saved, variables)) return saved;
+        }
+        return {
+          id: "custom",
+          name: metadata?.name || "Personalizada",
+          description: "Ajustá cada color para crear una identidad propia.",
+          source: "custom",
+          variables
+        };
+      }
+
+      function paletteContrastRatio(first, second) {
+        if (!isHexColor(first) || !isHexColor(second)) return null;
+        const toLinear = channel => {
+          const value = channel / 255;
+          return value <= 0.03928 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
+        };
+        const rgb = hex => [1, 3, 5].map(index => parseInt(hex.slice(index, index + 2), 16));
+        const luminance = hex => {
+          const [red, green, blue] = rgb(hex).map(toLinear);
+          return 0.2126 * red + 0.7152 * green + 0.0722 * blue;
+        };
+        const light = Math.max(luminance(first), luminance(second));
+        const dark = Math.min(luminance(first), luminance(second));
+        return (light + 0.05) / (dark + 0.05);
+      }
+
+      function formatContrast(value) {
+        return value === null ? "—" : `${value.toFixed(1)}:1`;
+      }
+
+      function setPaletteFeedback(message, tone = "info") {
+        const feedback = document.getElementById("paletteContrast");
+        if (!feedback) return;
+        feedback.textContent = message;
+        feedback.dataset.tone = tone;
+      }
+
+      function renderPaletteControls() {
+        const select = document.getElementById("palettePresetSelect");
+        if (!select) return;
+        const descriptor = currentPaletteDescriptor();
+        const metadata = state.styles.palette;
+        const selectedValue = descriptor.source === "preset"
+          ? descriptor.id
+          : descriptor.source === "ai"
+            ? "ai"
+            : descriptor.user_palette_id
+              ? descriptor.id
+              : "custom";
+        select.value = Array.from(select.options).some(option => option.value === selectedValue)
+          ? selectedValue
+          : "custom";
+        const status = document.getElementById("paletteStatus");
+        if (status) status.textContent = descriptor.name;
+        const nameInput = document.getElementById("paletteName");
+        if (nameInput && document.activeElement !== nameInput) nameInput.value = descriptor.name;
+        const description = document.getElementById("paletteDescription");
+        if (description) description.textContent = descriptor.description;
+
+        const swatches = document.getElementById("paletteSwatches");
+        if (swatches) {
+          swatches.replaceChildren();
+          paletteRoles.forEach(role => {
+            const item = document.createElement("span");
+            item.className = "palette-swatch-item";
+            item.setAttribute("role", "listitem");
+            const color = document.createElement("span");
+            color.className = "palette-swatch";
+            const value = state.styles.variables[role.variable];
+            if (isHexColor(value)) color.style.backgroundColor = value;
+            color.setAttribute("aria-hidden", "true");
+            const label = document.createElement("span");
+            label.className = "palette-swatch-copy";
+            label.textContent = `${role.label} ${isHexColor(value) ? value.toUpperCase() : "inválido"}`;
+            item.append(color, label);
+            swatches.appendChild(item);
+          });
+        }
+
+        const background = state.styles.variables["--color-background"];
+        const text = state.styles.variables["--color-text"];
+        const primary = state.styles.variables["--color-primary"];
+        const surface = state.styles.variables["--color-surface"];
+        const textBackground = paletteContrastRatio(text, background);
+        const primarySurface = paletteContrastRatio(primary, surface);
+        const passes = textBackground !== null && textBackground >= 4.5 && primarySurface !== null && primarySurface >= 3;
+        setPaletteFeedback(
+          passes
+            ? `Contraste recomendado · texto/fondo ${formatContrast(textBackground)} · principal/superficie ${formatContrast(primarySurface)}.`
+            : `Revisá el contraste · texto/fondo ${formatContrast(textBackground)} · principal/superficie ${formatContrast(primarySurface)}. Se recomienda 4.5:1 para texto y 3:1 para controles.`,
+          passes ? "success" : "warning"
+        );
+        if (metadata?.source === "ai" && selectedValue === "ai") {
+          select.title = "La paleta fue generada por IA; podés personalizarla con los controles de abajo.";
+        } else {
+          select.removeAttribute("title");
+        }
+        const deleteButton = document.getElementById("paletteDeleteButton");
+        if (deleteButton) deleteButton.hidden = !descriptor.user_palette_id;
+      }
+
+      function populatePaletteSelect() {
+        const select = document.getElementById("palettePresetSelect");
+        if (!select) return;
+        palettePresets.forEach(preset => {
+          if (Array.from(select.options).some(option => option.value === preset.id)) return;
+          const option = document.createElement("option");
+          option.value = preset.id;
+          option.textContent = preset.name;
+          select.appendChild(option);
+        });
+        select.querySelector('optgroup[data-user-palettes="true"]')?.remove();
+        if (userPalettes.length) {
+          const group = document.createElement("optgroup");
+          group.label = "Mis paletas";
+          group.dataset.userPalettes = "true";
+          userPalettes.forEach(palette => {
+            const option = document.createElement("option");
+            option.value = palette.id;
+            option.textContent = palette.name;
+            group.appendChild(option);
+          });
+          select.appendChild(group);
+        }
+      }
+
+      function getCsrfToken() {
+        const match = document.cookie.match(/(?:^|;\s*)csrftoken=([^;]+)/);
+        return match ? decodeURIComponent(match[1]) : "";
+      }
+
+      function markPaletteCustom(name) {
+        ensureStyleShape(state);
+        const customName = String(name || state.styles.palette?.name || "Personalizada")
+          .replace(/[\u0000-\u001f\u007f]/g, "")
+          .trim()
+          .slice(0, 80) || "Personalizada";
+        state.styles.palette = {
+          id: paletteSlug(customName),
+          name: customName,
+          source: "custom"
+        };
+      }
+
+      function applyPalette(paletteId) {
+        const palette = getPalettePreset(paletteId) || getUserPalette(paletteId);
+        if (!palette || !paletteValuesMatch(palette, palette.variables)) return false;
+        flushHistoryCommit();
+        ensureStyleShape(state);
+        paletteRoles.forEach(role => {
+          state.styles.variables[role.variable] = palette.variables[role.variable];
+        });
+        state.styles.palette = {
+          id: palette.id,
+          name: palette.name,
+          source: palette.source
+        };
+        updateAll({ skipHistory: true });
+        commitHistorySnapshot();
+        showToast(`Paleta ${palette.name} aplicada.`, "success");
+        return true;
+      }
+
+      function resetPalette() {
+        if (!paletteBaseline) return false;
+        flushHistoryCommit();
+        ensureStyleShape(state);
+        paletteRoles.forEach(role => {
+          const value = paletteBaseline.variables[role.variable];
+          if (value === undefined) delete state.styles.variables[role.variable];
+          else state.styles.variables[role.variable] = value;
+        });
+        if (paletteBaseline.palette) state.styles.palette = clone(paletteBaseline.palette);
+        else delete state.styles.palette;
+        updateAll({ skipHistory: true });
+        commitHistorySnapshot();
+        showToast("Paleta restablecida.", "success");
+        return true;
+      }
+
+      async function saveUserPalette() {
+        const button = document.getElementById("paletteSaveButton");
+        const nameInput = document.getElementById("paletteName");
+        const name = String(nameInput?.value || "Mi paleta")
+          .replace(/[\u0000-\u001f\u007f]/g, "")
+          .trim()
+          .slice(0, 80) || "Mi paleta";
+        const variables = {};
+        for (const role of paletteRoles) {
+          const value = state.styles?.variables?.[role.variable];
+          if (!isHexColor(value)) {
+            setPaletteFeedback("Completá los cuatro colores con valores HEX de seis dígitos antes de guardar.", "error");
+            return;
+          }
+          variables[role.variable] = value;
+        }
+        if (button) {
+          button.disabled = true;
+          button.textContent = "Guardando…";
+        }
+        try {
+          const response = await fetch("/api/user-palettes/", {
+            method: "POST",
+            credentials: "same-origin",
+            headers: {
+              "Content-Type": "application/json",
+              "X-CSRFToken": getCsrfToken(),
+            },
+            body: JSON.stringify({ name, variables }),
+          });
+          const data = await response.json().catch(() => ({}));
+          if (!response.ok) throw new Error(data.detail || "save failed");
+          const entry = {
+            id: data.slug,
+            name: data.name,
+            description: "Paleta guardada por vos para reutilizarla en otros templates.",
+            source: "custom",
+            variables: data.variables,
+            user_palette_id: data.id,
+          };
+          if (!entry.id || !paletteValuesMatch(entry, variables)) throw new Error("invalid palette response");
+          userPalettes.push(entry);
+          state.styles.palette = { id: entry.id, name: entry.name, source: "custom" };
+          populatePaletteSelect();
+          updateAll({ skipHistory: true });
+          commitHistorySnapshot();
+          showToast(`Paleta ${entry.name} guardada.`, "success");
+        } catch (error) {
+          setPaletteFeedback("No se pudo guardar la paleta. Intentá de nuevo.", "error");
+        } finally {
+          if (button) {
+            button.disabled = false;
+            button.textContent = "Guardar en mis paletas";
+          }
+        }
+      }
+
+      async function deleteUserPalette() {
+        const descriptor = currentPaletteDescriptor();
+        if (!descriptor.user_palette_id) return;
+        const button = document.getElementById("paletteDeleteButton");
+        if (button) button.disabled = true;
+        try {
+          const response = await fetch(
+            `/api/user-palettes/${encodeURIComponent(descriptor.user_palette_id)}/`,
+            {
+              method: "DELETE",
+              credentials: "same-origin",
+              headers: { "X-CSRFToken": getCsrfToken() },
+            },
+          );
+          if (!response.ok) throw new Error("delete failed");
+          const index = userPalettes.findIndex(item => item.user_palette_id === descriptor.user_palette_id);
+          if (index >= 0) userPalettes.splice(index, 1);
+          populatePaletteSelect();
+          markPaletteCustom(descriptor.name);
+          updateAll({ skipHistory: true });
+          commitHistorySnapshot();
+          showToast(`Paleta ${descriptor.name} eliminada del catálogo.`, "success");
+        } catch (error) {
+          setPaletteFeedback("No se pudo eliminar la paleta. Intentá de nuevo.", "error");
+          if (button) button.disabled = false;
+        }
+      }
 
       function clone(value) {
         return JSON.parse(JSON.stringify(value));
@@ -831,11 +1203,15 @@
         return escapeHtml(value);
       }
 
-      function showToast(message) {
+      function showToast(message, tone = "info") {
         clearTimeout(toastTimer);
         els.toast.textContent = message;
+        els.toast.dataset.tone = tone;
+        els.toast.setAttribute("role", tone === "error" ? "alert" : "status");
+        els.toast.setAttribute("aria-live", tone === "error" ? "assertive" : "polite");
         els.toast.classList.add("visible");
-        toastTimer = setTimeout(() => els.toast.classList.remove("visible"), 2300);
+        const timeout = tone === "error" ? 5600 : tone === "success" ? 3200 : 3800;
+        toastTimer = setTimeout(() => els.toast.classList.remove("visible"), timeout);
       }
 
       function updateHistoryButtons() {
@@ -1883,18 +2259,36 @@ ${body}
       }
 
       function setActiveTab(name) {
-        els.tabs.forEach(tab => tab.classList.toggle("active", tab.dataset.tab === name));
-        els.panels.forEach(panel => panel.classList.toggle("active", panel.dataset.panel === name));
+        els.tabs.forEach(tab => {
+          const active = tab.dataset.tab === name;
+          tab.classList.toggle("active", active);
+          tab.setAttribute("aria-selected", String(active));
+        });
+        els.panels.forEach(panel => {
+          const active = panel.dataset.panel === name;
+          panel.classList.toggle("active", active);
+          panel.setAttribute("aria-hidden", String(!active));
+        });
       }
 
       els.tabs.forEach(tab => {
+        tab.setAttribute("role", "tab");
+        tab.setAttribute("aria-selected", String(tab.classList.contains("active")));
         tab.addEventListener("click", () => setActiveTab(tab.dataset.tab));
       });
+      els.panels.forEach(panel => {
+        panel.setAttribute("role", "tabpanel");
+        panel.setAttribute("aria-hidden", String(!panel.classList.contains("active")));
+      });
+      setActiveTab(els.tabs.find(tab => tab.classList.contains("active"))?.dataset.tab || "content");
 
       document.querySelectorAll(".device-button").forEach(button => {
         button.addEventListener("click", () => {
-          document.querySelectorAll(".device-button").forEach(item => item.classList.remove("active"));
-          button.classList.add("active");
+          document.querySelectorAll(".device-button").forEach(item => {
+            const active = item === button;
+            item.classList.toggle("active", active);
+            item.setAttribute("aria-pressed", String(active));
+          });
           els.previewWrap.className = "preview-frame-wrap";
           if (button.dataset.device !== "desktop") {
             els.previewWrap.classList.add(button.dataset.device);
@@ -1937,6 +2331,7 @@ ${body}
       }
 
       function syncGeneralForms() {
+        ensureStyleShape(state);
         const heroTitle = findFirstElement("h1", null);
         const heroDescription = findFirstElement("p", "hero-description");
         const vars = state.styles.variables;
@@ -1960,6 +2355,7 @@ ${body}
         document.getElementById("seoTitle").value = state.document.head.title || "";
         document.getElementById("seoDescription").value = getMeta("description")?.content || "";
         document.getElementById("canonicalUrl").value = getCanonicalLink()?.href || "";
+        renderPaletteControls();
       }
 
       function setColorPair(textId, pickerId, value) {
@@ -1971,8 +2367,7 @@ ${body}
 
       function bindInput(id, handler, eventName = "input") {
         document.getElementById(id).addEventListener(eventName, event => {
-          handler(event.target.value);
-          updateAll();
+          if (handler(event.target.value) !== false) updateAll();
         });
       }
 
@@ -1994,9 +2389,43 @@ ${body}
         ["textColor", "textColorPicker", "--color-text"],
         ["surfaceColor", "surfaceColorPicker", "--color-surface"]
       ].forEach(([textId, pickerId, variable]) => {
-        bindInput(textId, value => state.styles.variables[variable] = value);
-        bindInput(pickerId, value => state.styles.variables[variable] = value);
+        bindInput(textId, value => {
+          const normalized = value.trim();
+          if (!isHexColor(normalized)) {
+            setPaletteFeedback("Usá un color HEX de seis dígitos, por ejemplo #2563EB.", "error");
+            return false;
+          }
+          ensureStyleShape(state);
+          state.styles.variables[variable] = normalized;
+          markPaletteCustom();
+          return true;
+        });
+        bindInput(pickerId, value => {
+          ensureStyleShape(state);
+          state.styles.variables[variable] = value;
+          markPaletteCustom();
+        });
       });
+
+      populatePaletteSelect();
+      document.getElementById("palettePresetSelect")?.addEventListener("change", event => {
+        const value = event.target.value;
+        if (value === "custom") {
+          flushHistoryCommit();
+          markPaletteCustom();
+          updateAll({ skipHistory: true });
+          commitHistorySnapshot();
+          showToast("Paleta personalizada lista.", "success");
+        } else if (value !== "ai") {
+          applyPalette(value);
+        }
+      });
+      bindInput("paletteName", value => {
+        markPaletteCustom(value);
+      });
+      document.getElementById("paletteSaveButton")?.addEventListener("click", saveUserPalette);
+      document.getElementById("paletteDeleteButton")?.addEventListener("click", deleteUserPalette);
+      document.getElementById("paletteResetButton")?.addEventListener("click", resetPalette);
 
       bindInput("fontFamily", value => state.styles.variables["--font-primary"] = value, "change");
       bindInput("maxWidth", value => state.styles.variables["--max-width"] = value);
@@ -2739,20 +3168,121 @@ ${body}
           hero: {
             type: "element",
             tag: "section",
-            attributes: { class: ["hero"] },
+            attributes: {
+              class: [
+                "bg-gray-50",
+                "py-16",
+                "text-gray-900",
+                "md:py-24"
+              ]
+            },
             children: [
               {
                 type: "element",
                 tag: "div",
-                attributes: { class: ["container"] },
+                attributes: {
+                  class: [
+                    "mx-auto",
+                    "grid",
+                    "w-full",
+                    "max-w-6xl",
+                    "gap-10",
+                    "px-5",
+                    "md:grid-cols-2",
+                    "md:items-center",
+                    "md:px-8"
+                  ]
+                },
                 children: [
-                  createTextElement("h1", "Un título que capta la atención"),
-                  createTextElement("p", "Explica aquí tu propuesta de valor de forma clara y convincente."),
                   {
                     type: "element",
-                    tag: "a",
-                    attributes: { class: ["button"], href: "#" },
-                    children: [{ type: "text", value: "Comenzar ahora" }]
+                    tag: "div",
+                    attributes: { class: ["max-w-2xl"] },
+                    children: [
+                      {
+                        ...createTextElement("h1", "Un título que capta la atención"),
+                        attributes: {
+                          class: [
+                            "text-4xl",
+                            "font-black",
+                            "leading-tight",
+                            "tracking-tight",
+                            "md:text-6xl"
+                          ]
+                        }
+                      },
+                      {
+                        ...createTextElement(
+                          "p",
+                          "Explica aquí tu propuesta de valor de forma clara y convincente."
+                        ),
+                        attributes: {
+                          class: [
+                            "mt-5",
+                            "text-lg",
+                            "leading-relaxed",
+                            "text-gray-600"
+                          ]
+                        }
+                      },
+                      {
+                        type: "element",
+                        tag: "a",
+                        attributes: {
+                          class: [
+                            "mt-7",
+                            "inline-flex",
+                            "items-center",
+                            "justify-center",
+                            "rounded-lg",
+                            "bg-indigo-600",
+                            "px-5",
+                            "py-3",
+                            "font-bold",
+                            "text-white",
+                            "shadow-md",
+                            "transition",
+                            "hover:opacity-90"
+                          ],
+                          href: "#"
+                        },
+                        children: [{ type: "text", value: "Comenzar ahora" }]
+                      }
+                    ]
+                  },
+                  {
+                    type: "element",
+                    tag: "div",
+                    attributes: {
+                      class: [
+                        "min-h-48",
+                        "rounded-2xl",
+                        "bg-indigo-600",
+                        "p-8",
+                        "shadow-xl",
+                        "md:min-h-64"
+                      ]
+                    },
+                    children: [
+                      {
+                        type: "element",
+                        tag: "div",
+                        attributes: {
+                          class: [
+                            "flex",
+                            "h-full",
+                            "items-end",
+                            "rounded-xl",
+                            "bg-indigo-500",
+                            "p-6",
+                            "text-3xl",
+                            "font-black",
+                            "text-white"
+                          ]
+                        },
+                        children: [{ type: "text", value: "Tu idea, en vivo" }]
+                      }
+                    ]
                   }
                 ]
               }
@@ -2761,18 +3291,32 @@ ${body}
           features: {
             type: "element",
             tag: "section",
-            attributes: { class: ["features"] },
+            attributes: { class: ["bg-white", "py-16", "md:py-24"] },
             children: [
               {
                 type: "element",
                 tag: "div",
-                attributes: { class: ["container"] },
+                attributes: {
+                  class: ["mx-auto", "w-full", "max-w-6xl", "px-5", "md:px-8"]
+                },
                 children: [
-                  createTextElement("h2", "Beneficios principales"),
+                  {
+                    ...createTextElement("h2", "Beneficios principales"),
+                    attributes: {
+                      class: [
+                        "mb-8",
+                        "text-3xl",
+                        "font-black",
+                        "tracking-tight",
+                        "text-gray-900",
+                        "md:text-5xl"
+                      ]
+                    }
+                  },
                   {
                     type: "element",
                     tag: "div",
-                    attributes: { class: ["feature-grid"] },
+                    attributes: { class: ["grid", "gap-5", "md:grid-cols-3"] },
                     children: [
                       featureCard("Fácil de usar", "Una experiencia clara para cualquier usuario."),
                       featureCard("Rápido", "Obtén resultados sin procesos innecesarios."),
@@ -2786,15 +3330,35 @@ ${body}
           text: {
             type: "element",
             tag: "section",
-            attributes: { class: ["content-section"] },
+            attributes: { class: ["bg-gray-50", "py-16", "md:py-24"] },
             children: [
               {
                 type: "element",
                 tag: "div",
-                attributes: { class: ["container"] },
+                attributes: {
+                  class: ["mx-auto", "w-full", "max-w-3xl", "px-5", "md:px-8"]
+                },
                 children: [
-                  createTextElement("h2", "Título de la sección"),
-                  createTextElement("p", "Escribe aquí la información que quieres compartir con tus visitantes.")
+                  {
+                    ...createTextElement("h2", "Título de la sección"),
+                    attributes: {
+                      class: ["text-3xl", "font-black", "tracking-tight", "text-gray-900", "md:text-5xl"]
+                    }
+                  },
+                  {
+                    ...createTextElement(
+                      "p",
+                      "Escribe aquí la información que quieres compartir con tus visitantes."
+                    ),
+                    attributes: {
+                      class: [
+                        "mt-5",
+                        "text-lg",
+                        "leading-relaxed",
+                        "text-gray-600"
+                      ]
+                    }
+                  }
                 ]
               }
             ]
@@ -2802,19 +3366,22 @@ ${body}
           image: {
             type: "element",
             tag: "section",
-            attributes: { class: ["image-section"] },
+            attributes: { class: ["bg-white", "py-16", "md:py-24"] },
             children: [
               {
                 type: "element",
                 tag: "div",
-                attributes: { class: ["container"] },
+                attributes: {
+                  class: ["mx-auto", "w-full", "max-w-6xl", "px-5", "md:px-8"]
+                },
                 children: [
                   {
                     type: "element",
                     tag: "img",
                     attributes: {
                       src: "https://images.unsplash.com/photo-1551434678-e076c223a692?auto=format&fit=crop&w=1400&q=80",
-                      alt: "Equipo trabajando"
+                      alt: "Equipo trabajando",
+                      class: ["h-auto", "w-full", "rounded-2xl", "object-cover", "shadow-lg"]
                     },
                     children: []
                   }
@@ -2825,19 +3392,62 @@ ${body}
           cta: {
             type: "element",
             tag: "section",
-            attributes: { class: ["cta"] },
+            attributes: { class: ["bg-gray-50", "py-16", "md:py-24"] },
             children: [
               {
                 type: "element",
                 tag: "div",
-                attributes: { class: ["container", "cta-box"] },
+                attributes: {
+                  class: [
+                    "mx-auto",
+                    "w-full",
+                    "max-w-6xl",
+                    "rounded-3xl",
+                    "bg-indigo-600",
+                    "p-8",
+                    "text-center",
+                    "text-white",
+                    "shadow-xl",
+                    "md:p-16"
+                  ]
+                },
                 children: [
-                  createTextElement("h2", "¿Listo para comenzar?"),
-                  createTextElement("p", "Da el siguiente paso y descubre todo lo que podemos ofrecerte."),
+                  {
+                    ...createTextElement("h2", "¿Listo para comenzar?"),
+                    attributes: {
+                      class: ["text-3xl", "font-black", "tracking-tight", "md:text-5xl"]
+                    }
+                  },
+                  {
+                    ...createTextElement(
+                      "p",
+                      "Da el siguiente paso y descubre todo lo que podemos ofrecerte."
+                    ),
+                    attributes: {
+                      class: ["mx-auto", "mt-4", "max-w-2xl", "text-lg", "text-indigo-100"]
+                    }
+                  },
                   {
                     type: "element",
                     tag: "a",
-                    attributes: { class: ["button", "button-light"], href: "#" },
+                    attributes: {
+                      class: [
+                        "mt-7",
+                        "inline-flex",
+                        "items-center",
+                        "justify-center",
+                        "rounded-lg",
+                        "bg-white",
+                        "px-5",
+                        "py-3",
+                        "font-bold",
+                        "text-indigo-700",
+                        "shadow-md",
+                        "transition",
+                        "hover:opacity-90"
+                      ],
+                      href: "#"
+                    },
                     children: [{ type: "text", value: "Comenzar" }]
                   }
                 ]
@@ -2847,14 +3457,32 @@ ${body}
           footer: {
             type: "element",
             tag: "footer",
-            attributes: { class: ["footer"] },
+            attributes: { class: ["border-t", "border-gray-200", "bg-white", "py-8"] },
             children: [
               {
                 type: "element",
                 tag: "div",
-                attributes: { class: ["container", "footer-row"] },
+                attributes: {
+                  class: [
+                    "mx-auto",
+                    "flex",
+                    "w-full",
+                    "max-w-6xl",
+                    "flex-col",
+                    "gap-3",
+                    "px-5",
+                    "text-gray-600",
+                    "md:flex-row",
+                    "md:items-center",
+                    "md:justify-between",
+                    "md:px-8"
+                  ]
+                },
                 children: [
-                  createTextElement("strong", "Mi marca"),
+                  {
+                    ...createTextElement("strong", "Mi marca"),
+                    attributes: { class: ["font-black", "text-gray-900"] }
+                  },
                   createTextElement("span", "© 2026. Todos los derechos reservados.")
                 ]
               }
@@ -2868,10 +3496,43 @@ ${body}
         return {
           type: "element",
           tag: "article",
-          attributes: { class: ["feature-card"] },
+          attributes: {
+            class: [
+              "rounded-2xl",
+              "border",
+              "border-gray-200",
+              "bg-white",
+              "p-6",
+              "shadow-sm"
+            ]
+          },
           children: [
-            createTextElement("h3", title),
-            createTextElement("p", description)
+            {
+              type: "element",
+              tag: "div",
+              attributes: {
+                class: [
+                  "flex",
+                  "h-10",
+                  "w-10",
+                  "items-center",
+                  "justify-center",
+                  "rounded-lg",
+                  "bg-indigo-600",
+                  "font-bold",
+                  "text-white"
+                ]
+              },
+              children: [{ type: "text", value: "✦" }]
+            },
+            {
+              ...createTextElement("h3", title),
+              attributes: { class: ["mt-5", "text-xl", "font-bold", "text-gray-900"] }
+            },
+            {
+              ...createTextElement("p", description),
+              attributes: { class: ["mt-2", "leading-relaxed", "text-gray-600"] }
+            }
           ]
         };
       }
@@ -2882,7 +3543,7 @@ ${body}
           state.document.body.children.push(node);
           selectedPath = [state.document.body.children.length - 1];
           updateAll();
-          setActiveTab("structure");
+          setActiveTab("content");
           showToast("Sección agregada.");
         });
       });
@@ -3008,11 +3669,12 @@ ${body}
               return;
             }
             imagePickerSavedGrid.innerHTML = "";
-            assets.forEach(asset => {
+            assets.forEach((asset, index) => {
               const thumb = document.createElement("button");
               thumb.type = "button";
               thumb.className = "preset";
-              thumb.innerHTML = `<img src="${asset.url}" alt="" style="width:100%;height:64px;object-fit:cover;border-radius:6px;">`;
+              thumb.setAttribute("aria-label", "Usar imagen guardada " + (index + 1));
+              thumb.innerHTML = `<img src="${asset.url}" alt="Imagen guardada ${index + 1}" style="width:100%;height:64px;object-fit:cover;border-radius:6px;">`;
               thumb.addEventListener("click", () => setImageOnTarget(asset.url));
               imagePickerSavedGrid.appendChild(thumb);
             });
@@ -3061,12 +3723,24 @@ ${body}
       }
 
       document.querySelectorAll("[data-image-tab]").forEach(btn => {
+        btn.setAttribute("role", "tab");
+        btn.setAttribute("aria-selected", String(btn.classList.contains("active")));
         btn.addEventListener("click", () => {
-          document.querySelectorAll("[data-image-tab]").forEach(b => b.classList.toggle("active", b === btn));
+          document.querySelectorAll("[data-image-tab]").forEach(b => {
+            const active = b === btn;
+            b.classList.toggle("active", active);
+            b.setAttribute("aria-selected", String(active));
+          });
           document.querySelectorAll("[data-image-panel]").forEach(panel => {
-            panel.classList.toggle("active", panel.dataset.imagePanel === btn.dataset.imageTab);
+            const active = panel.dataset.imagePanel === btn.dataset.imageTab;
+            panel.classList.toggle("active", active);
+            panel.setAttribute("aria-hidden", String(!active));
           });
         });
+      });
+      document.querySelectorAll("[data-image-panel]").forEach(panel => {
+        panel.setAttribute("role", "tabpanel");
+        panel.setAttribute("aria-hidden", String(!panel.classList.contains("active")));
       });
 
       function downloadFile(filename, content, mime) {
@@ -3115,7 +3789,8 @@ ${body}
         try {
           const parsed = JSON.parse(await file.text());
           validateImportedState(parsed);
-          state = parsed;
+          state = ensureStyleShape(parsed);
+          paletteBaseline = capturePaletteSnapshot(state);
           selectedPath = null;
           updateAll({ fullPreview: true });
           showToast("JSON importado correctamente.");
@@ -3140,6 +3815,7 @@ ${body}
       document.getElementById("resetButton").addEventListener("click", () => {
         if (!confirm("¿Quieres reemplazar todos los cambios por el ejemplo inicial?")) return;
         state = clone(defaultPage);
+        paletteBaseline = capturePaletteSnapshot(state);
         selectedPath = null;
         updateAll({ fullPreview: true });
         showToast("Ejemplo restablecido.");
@@ -3149,7 +3825,8 @@ ${body}
         try {
           const parsed = JSON.parse(els.jsonEditor.value);
           validateImportedState(parsed);
-          state = parsed;
+          state = ensureStyleShape(parsed);
+          paletteBaseline = capturePaletteSnapshot(state);
           selectedPath = null;
           els.jsonError.classList.remove("visible");
           updateAll({ fullPreview: true });
@@ -3205,6 +3882,7 @@ ${body}
         }
       });
 
+      paletteBaseline = capturePaletteSnapshot(state);
       updateHistoryButtons();
       updateAll({ skipHistory: true });
 
@@ -3212,6 +3890,7 @@ ${body}
       // Exposes a small, explicit API for editor-ai.js. Everything the AI panel
       // touches goes through here so the core editor stays untouched otherwise.
       window.EditorCore = {
+        showToast,
         getState() {
           return clone(state);
         },
@@ -3230,6 +3909,13 @@ ${body}
         getDesignVariables() {
           return clone((state.styles && state.styles.variables) || {});
         },
+        getPaletteCatalog() {
+          return clone(paletteCatalog);
+        },
+        getPalette() {
+          return clone(currentPaletteDescriptor());
+        },
+        applyPalette,
         getPageSummary() {
           const head = (state.document && state.document.head) || {};
           const htmlAttrs = (state.document && state.document.htmlAttributes) || {};
@@ -3255,7 +3941,7 @@ ${body}
         // Commit a proposed state as a SINGLE undo step.
         commitProposal(proposalState) {
           flushHistoryCommit();
-          state = proposalState;
+          state = ensureStyleShape(proposalState);
           if (Array.isArray(selectedPath) && !getNode(selectedPath)) {
             selectedPath = null;
           }
@@ -3267,7 +3953,8 @@ ${body}
         // the built-in defaultPage placeholder that state/historyPast boot with.
         loadSeed(proposalState) {
           flushHistoryCommit();
-          state = proposalState;
+          state = ensureStyleShape(proposalState);
+          paletteBaseline = capturePaletteSnapshot(state);
           if (Array.isArray(selectedPath) && !getNode(selectedPath)) {
             selectedPath = null;
           }
