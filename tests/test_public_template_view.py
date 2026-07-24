@@ -94,6 +94,20 @@ def test_public_view_never_references_editor_scripts(api, user):
         assert script not in body
 
 
+def test_public_view_includes_opt_in_analytics_tracker(api, user):
+    ut = UserTemplate.objects.create(owner=user, name="Tracked", state=_state())
+    response = api.post(f"{API_URL}{ut.id}/publish/")
+    slug = response.data["public_slug"]
+
+    public_response = api.get(f"/t/{slug}/")
+    body = public_response.content.decode()
+
+    assert 'id="analyticsConsent"' in body
+    assert 'data-template-slug="' + slug + '"' in body
+    assert "/static/analytics/public-tracker.css" in body
+    assert "/static/analytics/public-tracker.js" in body
+
+
 def test_public_view_renders_legacy_styles_rules_document(api, user):
     legacy_state = {
         "document": {

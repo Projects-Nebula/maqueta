@@ -1,0 +1,117 @@
+{% load static %}<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Analítica de visitas</title>
+  <link rel="stylesheet" href="{% static 'shared/tokens.css' %}">
+  <link rel="stylesheet" href="{% static 'shared/feedback.css' %}">
+  <link rel="stylesheet" href="{% static 'shared/navigation.css' %}">
+  <link rel="stylesheet" href="{% static 'analytics/dashboard.css' %}">
+</head>
+<body>
+  <header class="analytics-header">
+    <div>
+      <p class="eyebrow">Datos de tus páginas públicas</p>
+      <h1>Analítica de visitas</h1>
+      <p>Entendé qué contenido recibe atención sin registrar datos personales ni valores de formularios.</p>
+    </div>
+    <nav class="site-nav" aria-label="Navegación principal">
+      <a href="{% url 'editor:home' %}">Templates base</a>
+      <a href="{% url 'editor:gallery' %}">Mis templates</a>
+      <a href="{% url 'storefront:products' %}">Mis productos</a>
+      <a href="{% url 'storefront:payment-config' %}">Pasarelas de pago</a>
+      <a href="{% url 'analytics:dashboard' %}" aria-current="page">Analítica</a>
+    </nav>
+  </header>
+
+  <main class="analytics-main">
+    <div id="appFeedback" class="app-feedback" role="status" aria-live="polite" aria-atomic="true"></div>
+
+    <section class="analytics-controls panel" aria-labelledby="analyticsFiltersTitle">
+      <div>
+        <h2 id="analyticsFiltersTitle">Período y página</h2>
+        <p>Los datos se conservan durante el período configurado del proyecto.</p>
+      </div>
+      <div class="analytics-control-grid">
+        <label>
+          <span>Template</span>
+          <select id="analyticsTemplate" class="control">
+            <option value="">Todas las páginas</option>
+          </select>
+        </label>
+        <label>
+          <span>Período</span>
+          <select id="analyticsDays" class="control">
+            <option value="7">Últimos 7 días</option>
+            <option value="30" selected>Últimos 30 días</option>
+            <option value="90">Últimos 90 días</option>
+          </select>
+        </label>
+        <label>
+          <span>Mapa</span>
+          <select id="analyticsHeatmapKind" class="control">
+            <option value="all">Clicks y movimiento</option>
+            <option value="click">Solo clicks</option>
+            <option value="move">Solo movimiento</option>
+          </select>
+        </label>
+        <button id="analyticsRefresh" class="btn primary" type="button">Actualizar</button>
+      </div>
+    </section>
+
+    <section class="metric-grid" aria-label="Resumen de visitas" aria-live="polite">
+      <article class="metric-card"><span>Visitantes</span><strong id="metricVisitors">—</strong></article>
+      <article class="metric-card"><span>Sesiones</span><strong id="metricSessions">—</strong></article>
+      <article class="metric-card"><span>Vistas</span><strong id="metricPageviews">—</strong></article>
+      <article class="metric-card"><span>Duración promedio</span><strong id="metricDuration">—</strong></article>
+      <article class="metric-card"><span>Clicks</span><strong id="metricClicks">—</strong></article>
+    </section>
+
+    <section class="panel heatmap-panel" aria-labelledby="heatmapTitle">
+      <div class="section-heading">
+        <div>
+          <h2 id="heatmapTitle">Mapa de atención</h2>
+          <p>Los puntos están agrupados por zonas relativas de la página; no guardamos coordenadas personales.</p>
+        </div>
+        <span id="heatmapStatus" class="panel-status" aria-live="polite"></span>
+      </div>
+      <div class="heatmap-wrap">
+        <canvas id="analyticsHeatmap" width="960" height="480" role="img" aria-label="Mapa de atención de las visitas"></canvas>
+        <p id="heatmapEmpty" class="empty-state hidden">Todavía no hay suficientes interacciones para mostrar un mapa.</p>
+      </div>
+    </section>
+
+    <section class="panel" aria-labelledby="sessionsTitle">
+      <div class="section-heading">
+        <div>
+          <h2 id="sessionsTitle">Sesiones recientes</h2>
+          <p>Solo se muestran datos agregados y un identificador corto de sesión.</p>
+        </div>
+        <span id="sessionsStatus" class="panel-status" aria-live="polite"></span>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Página</th>
+              <th>Inicio</th>
+              <th>Duración</th>
+              <th>Vistas</th>
+              <th>Clicks</th>
+              <th>Movimiento</th>
+              <th>Salida</th>
+              <th>Viewport</th>
+            </tr>
+          </thead>
+          <tbody id="sessionsBody"></tbody>
+        </table>
+        <p id="sessionsEmpty" class="empty-state hidden">No hay sesiones en este período.</p>
+      </div>
+    </section>
+  </main>
+
+  <script src="{% static 'shared/feedback.js' %}"></script>
+  <script src="{% static 'analytics/dashboard.js' %}"></script>
+</body>
+</html>

@@ -141,7 +141,11 @@ class PublicTemplateView(APIView):
         user_template = UserTemplate.objects.filter(public_slug=slug, is_published=True).first()
         if not user_template:
             raise Http404
-        html = public_page_html(user_template.state, title_fallback=user_template.name)
+        html = public_page_html(
+            user_template.state,
+            title_fallback=user_template.name,
+            analytics_template_slug=user_template.public_slug,
+        )
         return HttpResponse(html)
 
 

@@ -23,6 +23,8 @@ urlpatterns = [
     path("", include("apps.storefront.urls")),
     path("api/products/", include("apps.storefront.api_urls")),
     path("api/payment-gateway-configs/", include("apps.storefront.payment_config_api_urls")),
+    path("analytics/", include("apps.analytics.urls")),
+    path("api/analytics/", include("apps.analytics.api_urls")),
     # ponytail: Django's own static-file view, not gated by DEBUG — fine at
     # this app's scale, swap for object storage/CDN if upload volume grows.
     path(

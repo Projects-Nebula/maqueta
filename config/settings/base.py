@@ -28,6 +28,8 @@ env = environ.Env(
     OPENCODE_ZEN_CHAT_MODEL=(str, "mimo-v2.5"),
     OPENCODE_ZEN_BASE_URL=(str, "https://opencode.ai/zen/go/v1"),
     DEFAULT_CURRENCY=(str, "usd"),
+    ANALYTICS_RETENTION_DAYS=(int, 90),
+    ANALYTICS_COOKIE_MAX_AGE=(int, 60 * 60 * 24 * 365),
 )
 
 # Read .env when present (development). In production, real env vars win.
@@ -53,6 +55,7 @@ INSTALLED_APPS = [
     "apps.ai_assistant",
     "apps.projects",
     "apps.storefront",
+    "apps.analytics",
 ]
 
 MIDDLEWARE = [
@@ -140,6 +143,8 @@ REST_FRAMEWORK = {
         "public_template_view": "60/m",
         "checkout_session_create": "10/m",
         "digital_download": "20/m",
+        "analytics_consent": "10/m",
+        "analytics_collect": "120/m",
     },
 }
 
@@ -170,6 +175,11 @@ AI_PROVIDER = env("AI_PROVIDER", default="openai" if OPENAI_API_KEY else "fake")
 # DEFAULT_CURRENCY stays a deployment-wide setting (not a secret, not
 # per-gateway).
 DEFAULT_CURRENCY = env("DEFAULT_CURRENCY")
+
+# Anonymous analytics is opt-in and bounded by the retention command. The
+# visitor cookie is pseudonymous and intentionally separate from auth.session.
+ANALYTICS_RETENTION_DAYS = env("ANALYTICS_RETENTION_DAYS")
+ANALYTICS_COOKIE_MAX_AGE = env("ANALYTICS_COOKIE_MAX_AGE")
 
 # --- Security headers ------------------------------------------------------
 DATA_UPLOAD_MAX_MEMORY_SIZE = 1024 * 1024  # 1 MB request body cap

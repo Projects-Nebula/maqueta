@@ -87,13 +87,20 @@ def thumbnail_srcdoc(state: dict | None) -> str | None:
     )
 
 
-def public_page_html(state: dict | None, *, title_fallback: str = "Página") -> str | None:
+def public_page_html(
+    state: dict | None,
+    *,
+    title_fallback: str = "Página",
+    analytics_template_slug: str | None = None,
+) -> str | None:
     """Full standalone HTML document for a published UserTemplate's public
     page (FEATURE.md 1.2) — unlike thumbnail_srcdoc, includes real <head>
     metadata (doctype, htmlAttributes, metas, title) since this is the
     actual page an anonymous visitor sees, not a scaled-down preview.
     Deliberately never references any editor script — read-only markup,
-    no editing surface for an anonymous visitor to reach."""
+    no editing surface for an anonymous visitor to reach. When a published
+    template slug is provided, the page also includes the opt-in, first-party
+    analytics consent UI and tracker."""
     if not isinstance(state, dict):
         return None
     document = state.get("document") or {}
@@ -108,12 +115,24 @@ def public_page_html(state: dict | None, *, title_fallback: str = "Página") -> 
     doctype = escape(str(document.get("doctype") or "html"))
     html_attrs_html = _render_attributes(document.get("htmlAttributes") or {})
     body_attrs_html = _render_attributes(body.get("attributes") or {})
+    analytics_head_html = ""
+    analytics_body_html = ""
+    if analytics_template_slug:
+        safe_slug = escape(str(analytics_template_slug), quote=True)
+        analytics_head_html = '<link rel="stylesheet" href="/static/analytics/public-tracker.css">'
+        analytics_body_html = (
+            f'<div id="analyticsConsent" data-template-slug="{safe_slug}"></div>'
+            f'<script src="/static/analytics/public-tracker.js" '
+            f'data-template-slug="{safe_slug}" defer></script>'
+        )
 
     return (
         f"<!DOCTYPE {doctype}><html{html_attrs_html}><head>"
         '<meta charset="UTF-8">'
         f"{metas_html}<title>{title}</title>"
+        '<link rel="stylesheet" href="/static/shared/tokens.css">'
         '<link rel="stylesheet" href="/static/editor/tailwind.css">'
+        f"{analytics_head_html}"
         f"<style>{css}</style>"
-        f"</head><body{body_attrs_html}>{body_html}</body></html>"
+        f"</head><body{body_attrs_html}>{body_html}{analytics_body_html}</body></html>"
     )
