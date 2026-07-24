@@ -140,6 +140,8 @@ openspec/          this spec set (project.md · specs/ · changes/)
 ## Commands
 
 ```bash
+./setup.sh                               # interactive prerequisites/dependencies/PostgreSQL bootstrap
+./run-local.sh                            # canonical Django development start
 uv sync
 docker compose up -d --wait db              # local PostgreSQL (creds editor/editor/editor)
 uv run python manage.py migrate
@@ -163,6 +165,10 @@ docker compose up --build
 `run-local.sh` uses port 8000 by default and detects an occupied port before
 installing/building anything. Use `PORT=8001 ./run-local.sh` when another
 development server already owns 8000.
+`setup.sh` is the interactive prerequisite bootstrap: it asks before installing
+missing uv/Python, Node/pnpm, or Docker requirements, stops when a required
+installation is refused, prepares dependencies/Tailwind/PostgreSQL, and
+applies migrations without starting Django.
 `stop-local.sh` stops the Django development server without touching the
 database by default; `./stop-local.sh --db` also stops PostgreSQL while
 preserving its volume.

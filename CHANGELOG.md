@@ -8,6 +8,11 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **Interactive local setup bootstrap.** `setup.sh` verifies uv/Python 3.12+,
+  Node 20+, pnpm 10.33.2, `.env`, and Docker Compose for PostgreSQL; it asks
+  before installing missing system requirements, stops on refusal, prepares
+  dependencies/Tailwind/migrations, and leaves Django startup to
+  `run-local.sh`.
 - **Owner-scoped reusable palettes.** `UserPalette` now provides validated
   CRUD at `/api/user-palettes/`; the editor can save/apply/delete entries and
   the wizard can deterministically reuse the current user's saved colors while

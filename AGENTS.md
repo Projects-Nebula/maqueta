@@ -9,6 +9,18 @@ not what the project is.
 ## Setup
 
 ```bash
+./setup.sh                                # interactive prerequisite/dependency bootstrap
+./run-local.sh                            # starts PostgreSQL when configured and Django
+```
+
+`setup.sh` asks before installing missing system requirements. Refusing a
+required installation stops the setup without starting the server. It prepares
+`.env`, Python/Node dependencies, Tailwind CSS, PostgreSQL, and migrations;
+`run-local.sh` remains responsible for starting Django.
+
+Manual equivalent:
+
+```bash
 uv sync
 corepack enable pnpm
 pnpm install --frozen-lockfile

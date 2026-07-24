@@ -83,6 +83,20 @@ Request flow for the template wizard (`/wizard/`):
 ## Local setup
 
 ```bash
+./setup.sh                               # checks/asks for prerequisites and prepares the project
+./run-local.sh                            # starts PostgreSQL (when configured) and Django
+```
+
+`setup.sh` is the interactive prerequisite bootstrap. It verifies uv/Python
+3.12+, Node 20+, pnpm 10.33.2, Docker Compose when PostgreSQL is configured,
+and `.env`. If a system requirement is missing, it asks before installing it;
+answering no stops the setup. It synchronizes dependencies, builds Tailwind,
+starts PostgreSQL when needed, and applies migrations, but it does not start
+Django.
+
+For a manual setup, use:
+
+```bash
 uv sync                                   # create .venv + install (from uv.lock)
 cp .env.example .env                      # then edit as needed
 uv run python manage.py migrate
@@ -90,7 +104,7 @@ uv run python manage.py createsuperuser
 uv run python manage.py runserver         # http://localhost:8000/editor/
 ```
 
-`run-local.sh` is the canonical local path: it honors the existing `.env`,
+`run-local.sh` is the canonical local start path: it honors the existing `.env`,
 starts `docker compose up -d --wait db` when `DATABASE_URL` points to
 PostgreSQL, applies migrations, and starts Django. PostgreSQL is the intended
 local database; SQLite remains available only as an explicit isolated-test or
