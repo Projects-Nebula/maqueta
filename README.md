@@ -105,7 +105,11 @@ current local database rows and referenced media files, then loads deterministic
 users, templates, projects, palettes, assets, products, payment configurations,
 orders, and analytics. It is restricted to development settings unless
 `MOCKUP_ALLOW_NON_DEBUG=1` is explicitly set. The demo login is `demo` /
-`demo12345`; the command prints the generated public page URL.
+`demo12345`; the command prints the generated public page URL. Uncomment the
+`MOCKUP_USERNAME`, `MOCKUP_EMAIL`, and `MOCKUP_PASSWORD` entries in
+`.env.example` to override those credentials. Keep `MOCKUP_ALLOW_NON_DEBUG`
+commented in local and shared environments because it bypasses the development
+safety guard.
 
 For a manual setup, use:
 

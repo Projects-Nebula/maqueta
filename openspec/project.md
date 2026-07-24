@@ -177,7 +177,10 @@ Django remains the responsibility of `run-local.sh`.
 `mockup.sh` is the local demo-data bootstrap: it migrates, flushes the database
 and referenced media files, then creates deterministic records across auth,
 editor, projects, storefront, and analytics. It refuses non-development
-settings unless `MOCKUP_ALLOW_NON_DEBUG=1` is explicitly set.
+settings unless `MOCKUP_ALLOW_NON_DEBUG=1` is explicitly set. The commented
+`MOCKUP_USERNAME`, `MOCKUP_EMAIL`, and `MOCKUP_PASSWORD` entries in
+`.env.example` optionally override the printed demo credentials; keep
+`MOCKUP_ALLOW_NON_DEBUG` disabled outside an explicitly controlled local run.
 `stop-local.sh` stops the Django development server without touching the
 database by default; `./stop-local.sh --db` also stops PostgreSQL while
 preserving its volume.

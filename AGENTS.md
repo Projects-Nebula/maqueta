@@ -28,7 +28,9 @@ setup script still exits before starting the development server.
 database and referenced media files, and seeds deterministic records for every
 application model. It refuses `DEBUG=False` unless
 `MOCKUP_ALLOW_NON_DEBUG=1` is explicitly provided. The seeded local login is
-`demo` / `demo12345`.
+`demo` / `demo12345`. Optional credential overrides are documented as commented
+`MOCKUP_USERNAME`, `MOCKUP_EMAIL`, and `MOCKUP_PASSWORD` entries in
+`.env.example`; keep the non-development override commented by default.
 
 Manual equivalent:
 
