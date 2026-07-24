@@ -972,6 +972,7 @@
   font-family: ui-monospace, monospace; font-size: 22px; font-weight: 700;
   letter-spacing: 3px; margin: 6px 0;
 }
+[hidden],
 .hidden { display: none !important; }
 
 /* --- AI assistant FAB + drawer -------------------------------------------- */
