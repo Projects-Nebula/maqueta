@@ -18,12 +18,18 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 # Node is build-time only (Tailwind CLI), never present in the runtime
 # image. Debian bookworm's apt nodejs is 18.x, too old for Tailwind v4
 # (needs 20+) — install from NodeSource instead.
+ENV PNPM_HOME="/pnpm"
+ENV PATH="/pnpm:${PATH}"
+
 RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates gnupg \
     && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
     && apt-get install -y --no-install-recommends nodejs \
-    && rm -rf /var/lib/apt/lists/*
-RUN --mount=type=cache,target=/root/.cache/npm \
-    npm install && npm run build:css
+    && rm -rf /var/lib/apt/lists/* \
+    && corepack enable pnpm
+RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
+    pnpm config set store-dir /pnpm/store \
+    && pnpm install --frozen-lockfile \
+    && pnpm run build:css
 
 
 FROM python:3.12-slim-bookworm AS runtime

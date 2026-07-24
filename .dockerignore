@@ -3,6 +3,7 @@ db.sqlite3
 staticfiles/
 .env
 .git/
+node_modules/
 .pytest_cache/
 .ruff_cache/
 __pycache__/

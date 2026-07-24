@@ -6,7 +6,7 @@ set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")"
 
 command -v uv >/dev/null || { echo "Falta uv: https://docs.astral.sh/uv/"; exit 1; }
-command -v npm >/dev/null || { echo "Falta npm/Node 20+ (para el build de Tailwind CSS)"; exit 1; }
+command -v pnpm >/dev/null || { echo "Falta pnpm/Node 20+; ejecutá 'corepack enable pnpm' (para el build de Tailwind CSS)"; exit 1; }
 
 if [ ! -f .env ]; then
   cp .env.example .env
@@ -43,8 +43,8 @@ case "$database_url" in
 esac
 
 uv sync
-npm install
-npm run build:css
-# Para desarrollo activo del CSS: `npx @tailwindcss/cli -i static/editor/tailwind-input.css -o static/editor/tailwind.css --watch`
+pnpm install --frozen-lockfile
+pnpm run build:css
+# Para desarrollo activo del CSS: `pnpm exec @tailwindcss/cli -i static/editor/tailwind-input.css -o static/editor/tailwind.css --watch`
 uv run python manage.py migrate
 uv run python manage.py runserver "0.0.0.0:$port"

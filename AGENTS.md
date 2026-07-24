@@ -10,8 +10,9 @@ not what the project is.
 
 ```bash
 uv sync
-npm install
-npm run build:css                           # compiles static/editor/tailwind.css
+corepack enable pnpm
+pnpm install --frozen-lockfile
+pnpm run build:css                           # compiles static/editor/tailwind.css
 docker compose up -d --wait db              # local PostgreSQL (run-local.sh does this automatically)
 uv run python manage.py migrate
 uv run python manage.py createsuperuser
@@ -33,7 +34,7 @@ Use `./stop-local.sh` to stop only Django; pass `--db` when PostgreSQL should
 also be stopped. The command never removes the PostgreSQL data volume.
 
 Styling is Tailwind CSS (utility classes on `attributes.class`, see
-`apps/ai_assistant/tailwind_classes.py`) — `npm run build:css` must be rerun
+`apps/ai_assistant/tailwind_classes.py`) — `pnpm run build:css` must be rerun
 after changing the class allowlist there, since it regenerates the safelist
 that drives the Tailwind CLI build. Needs Node 20+ (Tailwind v4).
 Cross-page UI tokens live in `static/shared/tokens.css`; link that stylesheet
@@ -63,7 +64,7 @@ uv run ruff format --check .
 AI_PROVIDER=fake uv run pytest            # deterministic AI-backed test gate
 uv run python manage.py check
 uv run python manage.py makemigrations --check --dry-run
-npm test
+pnpm test
 ```
 
 For UI/frontend changes, actually run the feature in a browser (or via a
@@ -72,7 +73,7 @@ Passing tests verifies correctness of the code, not of the feature.
 
 ### Browser (Playwright) tests
 
-`tests/e2e/` holds real-browser Playwright specs (`npm run test:e2e`) against
+`tests/e2e/` holds real-browser Playwright specs (`pnpm run test:e2e`) against
 a running dev server (`BASE_URL`, default `http://127.0.0.1:8000`) and an
 existing test user (`E2E_USERNAME`/`E2E_PASSWORD`). If the host is missing
 Chromium's system libs (`libnspr4` etc.) and there's no passwordless sudo to
@@ -81,7 +82,7 @@ root, with the dev server already running on the host:
 
 ```bash
 docker run --rm --network host -v "$PWD":/work -w /work \
-  mcr.microsoft.com/playwright:v1.61.1-jammy npx playwright test tests/e2e
+  mcr.microsoft.com/playwright:v1.61.1-jammy corepack pnpm exec playwright test tests/e2e
 ```
 
 If the container created a `test-results/` directory owned by its service
@@ -89,7 +90,7 @@ user, add `--output /tmp/maqueta-e2e-container` so the reporter does not need
 to rewrite mounted container-owned artifacts.
 
 Keep the image tag matched to the installed `@playwright/test` version
-(`npx playwright --version`) — a mismatch fails the browser launch.
+(`pnpm exec playwright --version`) — a mismatch fails the browser launch.
 
 ## Using learnings.jsonl
 

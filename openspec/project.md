@@ -32,6 +32,9 @@ token/device flow is needed.
   `compose.yaml` provides a `db` service). SQLite is supported only as an
   explicit isolated-test or fallback override.
 - pytest + pytest-django + pytest-mock, ruff (lint + format).
+- Node 20+ with pnpm 10.33.2 for frontend dependencies and Tailwind/Node
+  tests; the version is pinned in `package.json` and `pnpm-lock.yaml` is the
+  only frontend dependency lockfile. Enable it with `corepack enable pnpm`.
 - Docker + Docker Compose.
 
 ## Layout
@@ -76,7 +79,7 @@ templates/         registration/login · editor/editor.html · editor/home.html 
 static/editor/     editor.css · editor-core.js · editor-ai.js · seed-loader.js ·
                    save-template.js · wizard.css · template-wizard.js ·
                    autosave.js · tailwind-input.css (source) ·
-                   tailwind.css (compiled, gitignored, `npm run build:css`)
+                   tailwind.css (compiled, gitignored, `pnpm run build:css`)
 static/shared/     tokens.css (shared cross-page design tokens) ·
                    ai-stream.js (shared AI SSE/reasoning client)
 static/storefront/ products.js (/productos/) · payment-config.js (/config/)
@@ -148,8 +151,8 @@ uv run ruff format --check .
 AI_PROVIDER=fake uv run pytest            # deterministic AI-backed test gate
 uv run python manage.py check
 uv run python manage.py makemigrations --check --dry-run
-npm test
-npm run build:css                          # required after Tailwind/frontend changes
+pnpm test
+pnpm run build:css                          # required after Tailwind/frontend changes
 uv run python manage.py purge_analytics --days=90
 # Or use the canonical local bootstrap (starts PostgreSQL automatically):
 ./run-local.sh

@@ -133,7 +133,7 @@ shared primitives and the continuous-improvement rules below.
 
 ### Final verification
 
-- `npm run build:css` completed with Tailwind v4.3.3.
+- `pnpm run build:css` completed with Tailwind v4.3.3.
 - Ruff check and format check passed; `manage.py check` reported no issues and
   `makemigrations --check --dry-run` reported no changes.
 - `AI_PROVIDER=fake uv run pytest` passed **251 tests** against the configured

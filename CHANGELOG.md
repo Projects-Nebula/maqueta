@@ -117,7 +117,7 @@ this project adheres to [Semantic Versioning](https://semver.org/).
     `operations.py` (`set_attribute`/`class`) and `sanitize.py`
     (`check_attributes`, used by full-document validation and
     `add_node`/`replace_node`).
-  - Tailwind v4 CLI build pipeline (`npm run build:css`): a management
+  - Tailwind v4 CLI build pipeline (`pnpm run build:css`): a management
     command (`generate_tailwind_safelist`) materializes the allowlist into a
     sentinel file Tailwind treats as its only content source
     (`tailwind-input.css`'s `@import "tailwindcss" source(none)` +
@@ -214,6 +214,10 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **pnpm is now the canonical frontend package manager.** The repository pins
+  pnpm 10.33.2 in `package.json`, tracks `pnpm-lock.yaml`, and uses frozen
+  pnpm installs across local startup, Docker builds, GitHub Actions, and the
+  documented test/build commands.
 - **Shared UI design tokens across all server-rendered surfaces.** Extracted
   the editor's canonical palette, typography, radius, and shadow variables to
   `static/shared/tokens.css`; editor, wizard, template galleries, storefront,

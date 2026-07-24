@@ -15,6 +15,12 @@
   "author": "",
   "license": "ISC",
   "type": "commonjs",
+  "packageManager": "pnpm@10.33.2",
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@parcel/watcher"
+    ]
+  },
   "devDependencies": {
     "@playwright/test": "^1.61.1",
     "@tailwindcss/cli": "^4.3.3",

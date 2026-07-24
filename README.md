@@ -77,7 +77,7 @@ Request flow for the template wizard (`/wizard/`):
 
 - Python 3.12
 - [uv](https://docs.astral.sh/uv/) (`curl -LsSf https://astral.sh/uv/install.sh | sh`)
-- Node 20+ (Tailwind CSS build — `npm install && npm run build:css`)
+- Node 20+ with Corepack and pnpm 10.33.2 (run `corepack enable pnpm`; Tailwind CSS build — `pnpm install --frozen-lockfile && pnpm run build:css`)
 - Docker + Docker Compose (local PostgreSQL and the reproducible stack)
 
 ## Local setup
@@ -113,8 +113,8 @@ uv run ruff format --check .
 AI_PROVIDER=fake uv run pytest            # deterministic AI-backed test gate
 uv run python manage.py check
 uv run python manage.py makemigrations --check --dry-run
-npm test                                   # frontend Node test suite
-npm run build:css                          # required after frontend/Tailwind changes
+pnpm test                                   # frontend Node test suite
+pnpm run build:css                          # required after frontend/Tailwind changes
 ```
 
 Frontend changes also require the relevant real-browser specs in
