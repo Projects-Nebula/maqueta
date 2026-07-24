@@ -7,6 +7,8 @@ rejected outright — the frontend applies only vetted operations.
 
 from __future__ import annotations
 
+from apps.editor.palettes import PaletteValidationError, validate_palette_variables
+
 from .sanitize import (
     URL_ATTRS,
     SanitizationError,
@@ -16,7 +18,7 @@ from .sanitize import (
     check_url_value,
     sanitize_node,
 )
-from .tailwind_classes import check_class_list
+from .tailwind_classes import KNOWN_VARIABLE_NAMES, check_class_list
 
 POSITIONS = {"before", "after", "inside"}
 
@@ -101,7 +103,13 @@ def _validate_one(op):
         check_attribute_name(attribute)
 
     elif action == "set_style_variable":
-        check_css_variable(op.get("name"), op.get("value"))
+        name = op.get("name")
+        _require(name in KNOWN_VARIABLE_NAMES, f"style variable is not a palette role: {name}")
+        check_css_variable(name, op.get("value"))
+        try:
+            validate_palette_variables({name: op.get("value")})
+        except PaletteValidationError as exc:
+            raise OperationValidationError(str(exc)) from exc
 
     elif action == "set_css_declaration":
         _require(isinstance(op.get("selector"), str) and op["selector"], "selector required")

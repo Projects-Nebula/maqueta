@@ -17,6 +17,20 @@ VALID_NODE = {
     "children": [{"type": "text", "value": "Ver beneficios"}],
 }
 
+LEGACY_HEADER_NODE = {
+    "type": "element",
+    "tag": "header",
+    "attributes": {"class": ["site-header", "legacy-layout"]},
+    "children": [
+        {
+            "type": "element",
+            "tag": "nav",
+            "attributes": {"class": ["nav", "items-center"]},
+            "children": [],
+        },
+    ],
+}
+
 
 def _payload(**overrides):
     base = {
@@ -51,6 +65,18 @@ def test_valid_request_with_history(api):
     ]
     response = api.post(URL, _payload(history=history), format="json")
     assert response.status_code == 200
+
+
+def test_legacy_classes_in_selected_node_do_not_block_transform(api):
+    response = api.post(
+        URL,
+        _payload(selected_path=[0], selected_node=LEGACY_HEADER_NODE),
+        format="json",
+    )
+    assert response.status_code == 200
+    events = _parse_sse(_sse_body(response))
+    done = dict(events)["done"]
+    assert done["operations"][0]["value"] == ["bg-yellow-100"]
 
 
 def test_history_over_limit_rejected(api):

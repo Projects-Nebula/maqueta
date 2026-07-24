@@ -14,6 +14,12 @@ the injection surface sanitize.py's node-tree checks are designed to close.
 
 from __future__ import annotations
 
+from apps.editor.palettes import (
+    PaletteValidationError,
+    validate_palette_metadata,
+    validate_palette_variables,
+)
+
 from .sanitize import (
     MAX_ASSETS,
     MAX_MEDIA_QUERIES,
@@ -132,6 +138,14 @@ def _check_styles(styles):
     _require(len(variables) <= MAX_STYLE_VARIABLES, "too many style variables")
     for name, value in variables.items():
         check_css_variable(name, value)
+
+    palette = styles.get("palette")
+    if palette is not None:
+        try:
+            validate_palette_metadata(palette, variables=variables)
+            validate_palette_variables(variables, require_all=True)
+        except PaletteValidationError as exc:
+            raise DocumentValidationError(str(exc)) from exc
 
     _check_rule_list(styles.get("rules", []), label="styles.rules")
 

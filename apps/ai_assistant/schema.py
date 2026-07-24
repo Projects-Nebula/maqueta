@@ -116,6 +116,19 @@ WIZARD_STYLES_JSON_SCHEMA = {
     "type": "object",
     "required": ["styles"],
     "properties": {
-        "styles": {"type": "object"},
+        "styles": {
+            "type": "object",
+            "properties": {
+                "variables": {"type": "object"},
+                "palette": {
+                    "type": "object",
+                    "properties": {
+                        "id": {"type": "string"},
+                        "name": {"type": "string"},
+                        "source": {"type": "string", "enum": ["ai"]},
+                    },
+                },
+            },
+        },
     },
 }

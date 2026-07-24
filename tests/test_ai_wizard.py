@@ -9,6 +9,7 @@ from apps.ai_assistant.wizard_service import (
     WizardQuestionsResult,
     WizardReviewResult,
 )
+from apps.editor.models import UserPalette
 from tests.sse_helpers import parse_sse, sse_body
 
 pytestmark = pytest.mark.django_db
@@ -64,6 +65,43 @@ def test_review_requires_authentication(anon_api):
 def test_generate_requires_authentication(anon_api):
     response = anon_api.post(GENERATE_URL, {"description": "x", "answers": {}}, format="json")
     assert response.status_code in (401, 403)
+
+
+def test_generate_rejects_unknown_palette_preset(api):
+    response = api.post(
+        GENERATE_URL,
+        {"description": "x", "answers": {}, "palette_id": "not-a-preset"},
+        format="json",
+    )
+    assert response.status_code == 400
+
+
+def test_generate_resolves_only_the_current_users_saved_palette(api, user, mocker):
+    palette = UserPalette.objects.create(
+        owner=user,
+        slug="custom-mi-marca",
+        name="Mi marca",
+        variables={
+            "--color-primary": "#112233",
+            "--color-background": "#f8fafc",
+            "--color-text": "#0f172a",
+            "--color-surface": "#ffffff",
+        },
+    )
+    result = WizardDocumentResult(name="Mi template", summary="ok", state=VALID_DOCUMENT)
+    stream = mocker.patch("apps.ai_assistant.wizard_views.WizardAIService.stream_generate_document")
+    stream.side_effect = _stream(("done", result))
+
+    response = api.post(
+        GENERATE_URL,
+        {"description": "x", "answers": {}, "palette_id": palette.slug},
+        format="json",
+    )
+
+    assert response.status_code == 200
+    sse_body(response)
+    assert stream.call_args.kwargs["selected_palette"]["id"] == palette.slug
+    assert stream.call_args.kwargs["selected_palette"]["source"] == "custom"
 
 
 # --- questions ------------------------------------------------------------

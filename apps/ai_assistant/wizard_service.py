@@ -15,6 +15,12 @@ from dataclasses import dataclass
 
 from django.conf import settings
 
+from apps.editor.palettes import (
+    PaletteValidationError,
+    get_palette_preset,
+    validate_palette_variables,
+)
+
 from .document_validation import DocumentValidationError, sanitize_document
 from .prompts import (
     WIZARD_DOCUMENT_STRUCTURE_PROMPT,
@@ -166,7 +172,13 @@ class WizardAIService:
             )
 
     def stream_generate_document(
-        self, description: str, answers: dict, history: list, assets: list | None = None
+        self,
+        description: str,
+        answers: dict,
+        history: list,
+        assets: list | None = None,
+        palette_id: str | None = None,
+        selected_palette: dict | None = None,
     ):
         """Yield ("reasoning", text) chunks from both phases, then a final
         ("done", WizardDocumentResult).
@@ -190,6 +202,7 @@ class WizardAIService:
         available_images = [
             {"url": a["url"], "width": a["width"], "height": a["height"]} for a in (assets or [])
         ]
+        selected_palette = selected_palette or get_palette_preset(palette_id)
         for kind, value in self._provider.stream_generate(
             system_prompt=WIZARD_DOCUMENT_STRUCTURE_PROMPT,
             history=history,
@@ -197,6 +210,7 @@ class WizardAIService:
                 "description": description,
                 "answers": answers,
                 "available_images": available_images,
+                "selected_palette": selected_palette,
             },
             schema=WIZARD_DOCUMENT_STRUCTURE_JSON_SCHEMA,
         ):
@@ -232,33 +246,58 @@ class WizardAIService:
 
         body = (skeleton.get("document") or {}).get("body")
 
-        styles = None
-        for kind, value in self._provider.stream_generate(
-            system_prompt=WIZARD_STYLES_PROMPT,
-            history=history,
-            payload={"description": description, "answers": answers, "body": body},
-            schema=WIZARD_STYLES_JSON_SCHEMA,
-        ):
-            if kind == "reasoning":
-                yield "reasoning", value
-                continue
-            raw = value
-            styles = raw.get("styles") if isinstance(raw, dict) else None
-            raw_reasoning = raw.get("reasoning") if isinstance(raw, dict) else None
-            if raw_reasoning:
-                reasoning_parts.append(raw_reasoning)
+        if selected_palette:
+            # A user-selected palette is deterministic: the catalog, not the
+            # model, owns its four values. Skipping the style call also avoids
+            # an AI response silently changing an explicit user choice.
+            styles = {
+                "variables": selected_palette["variables"],
+                "palette": {
+                    "id": selected_palette["id"],
+                    "name": selected_palette["name"],
+                    "source": selected_palette["source"],
+                },
+                "rules": [],
+                "mediaQueries": [],
+                "keyframes": [],
+            }
+        else:
+            styles = None
+            for kind, value in self._provider.stream_generate(
+                system_prompt=WIZARD_STYLES_PROMPT,
+                history=history,
+                payload={"description": description, "answers": answers, "body": body},
+                schema=WIZARD_STYLES_JSON_SCHEMA,
+            ):
+                if kind == "reasoning":
+                    yield "reasoning", value
+                    continue
+                raw = value
+                styles = raw.get("styles") if isinstance(raw, dict) else None
+                raw_reasoning = raw.get("reasoning") if isinstance(raw, dict) else None
+                if raw_reasoning:
+                    reasoning_parts.append(raw_reasoning)
 
-        # Styling now lives inline as Tailwind classes on each node (set
-        # during the structure phase above) — this second call only ever
-        # contributes brand-color variables. Force the rest empty rather
-        # than trust the model to keep echoing back empty boilerplate.
-        variables = (styles or {}).get("variables") if isinstance(styles, dict) else {}
-        styles = {
-            "variables": variables or {},
-            "rules": [],
-            "mediaQueries": [],
-            "keyframes": [],
-        }
+            # Styling now lives inline as Tailwind classes on each node (set
+            # during the structure phase above) — this second call only ever
+            # contributes the four brand-color variables. Force the rest
+            # empty rather than trusting model boilerplate.
+            raw_variables = (styles or {}).get("variables") if isinstance(styles, dict) else {}
+            try:
+                variables = validate_palette_variables(raw_variables, require_all=True)
+            except PaletteValidationError as exc:
+                raise DocumentValidationError(str(exc)) from exc
+            styles = {
+                "variables": variables,
+                "palette": {
+                    "id": "ai-generated",
+                    "name": "Paleta generada",
+                    "source": "ai",
+                },
+                "rules": [],
+                "mediaQueries": [],
+                "keyframes": [],
+            }
 
         document = {**skeleton, "styles": styles}
         try:

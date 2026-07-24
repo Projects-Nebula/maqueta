@@ -87,3 +87,24 @@ def test_upload_is_owner_scoped(api, user):
     response = api.post(URL, {"file": upload}, format="multipart")
     assert response.status_code == 201
     assert UploadedAsset.objects.get().owner == user
+
+
+def test_asset_can_be_deleted_by_owner(api, user, settings, tmp_path):
+    settings.MEDIA_ROOT = tmp_path
+    upload = SimpleUploadedFile("x.png", _png_bytes(), content_type="image/png")
+    response = api.post(URL, {"file": upload}, format="multipart")
+    asset_id = response.json()["id"]
+
+    response = api.delete(f"{URL}{asset_id}/")
+
+    assert response.status_code == 204
+    assert not UploadedAsset.objects.filter(pk=asset_id).exists()
+
+
+def test_asset_delete_is_owner_scoped(api, other_user):
+    asset = UploadedAsset.objects.create(owner=other_user, width=10, height=10)
+
+    response = api.delete(f"{URL}{asset.id}/")
+
+    assert response.status_code == 404
+    assert UploadedAsset.objects.filter(pk=asset.id).exists()

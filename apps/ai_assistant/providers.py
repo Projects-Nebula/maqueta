@@ -163,7 +163,7 @@ class FakeAIProvider(AIProvider):
                     "action": "set_attribute",
                     "path": selected_path,
                     "attribute": "class",
-                    "value": [*existing, "ai-highlight"],
+                    "value": [*existing, "bg-yellow-100"],
                 }
             ],
         }

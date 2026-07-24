@@ -14,6 +14,8 @@ from __future__ import annotations
 import re
 from collections.abc import Iterator
 
+from apps.editor.palettes import PALETTE_VARIABLE_NAMES
+
 from .sanitize import SanitizationError
 
 CSS_VAR_RE = re.compile(r"^--[a-z0-9-]+$", re.IGNORECASE)
@@ -24,12 +26,7 @@ MAX_CLASSES_PER_NODE = 20
 # (templates/editor/editor.html's "Diseño global" tab) actually writes into
 # styles.variables — the only variable names the arbitrary-value bridge
 # (`bg-[var(--x)]`) may reference. Keep in sync with that panel's fields.
-KNOWN_VARIABLE_NAMES = {
-    "--color-primary",
-    "--color-background",
-    "--color-text",
-    "--color-surface",
-}
+KNOWN_VARIABLE_NAMES = frozenset(PALETTE_VARIABLE_NAMES)
 
 SPACING_SCALE = {
     "0",
@@ -456,3 +453,31 @@ def check_class_list(value) -> None:
     for token in tokens:
         if not is_allowed_tailwind_class(token):
             raise SanitizationError(f"disallowed Tailwind class: {token}")
+
+
+def normalize_context_class_list(value):
+    """Keep only current Tailwind classes in AI-only node context.
+
+    Saved pages created before the Tailwind migration may contain semantic
+    classes such as ``site-header``. They are useful to the renderer, but
+    they are not valid classes for an AI-generated ``set_attribute`` value.
+    Context normalization removes those legacy tokens before the model sees
+    the node; ``check_class_list`` remains strict for every generated node or
+    operation.
+    """
+    if isinstance(value, list):
+        if not all(isinstance(item, str) for item in value):
+            raise SanitizationError("class list must be strings")
+        tokens = value
+        as_list = True
+    elif isinstance(value, str):
+        tokens = value.split()
+        as_list = False
+    else:
+        raise SanitizationError("class value must be a string or list")
+
+    if len(tokens) > MAX_CLASSES_PER_NODE:
+        raise SanitizationError("too many classes on one element")
+
+    normalized = [token for token in tokens if is_allowed_tailwind_class(token)]
+    return normalized if as_list else " ".join(normalized)

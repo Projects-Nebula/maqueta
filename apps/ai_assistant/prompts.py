@@ -271,6 +271,9 @@ Reglas estrictas:
   lista>","alt":"<descripción corta>"},"children":[]}` — usá la URL EXACTA
   tal cual viene, nunca inventes una URL de imagen. Si "available_images"
   viene vacío o ninguna encaja, no uses <img>.
+- Si el contexto trae "selected_palette", respetá esa elección y referenciá
+  sus roles semánticos mediante var(--color-primary), sin inventar colores
+  hexadecimales ni otra paleta.
 - Un nodo es {"type":"element","tag":"...","attributes":{},"children":[...]}
   o {"type":"text","value":"..."}. Nunca insertes <script>, <object>, <embed>,
   atributos on*, srcdoc, ni URLs javascript:/data:text/html. La única
@@ -318,11 +321,14 @@ contexto de la página (descripción del usuario, respuestas del formulario).
 Responde EXCLUSIVAMENTE con un objeto JSON con esta forma EXACTA:
 {"styles": {"variables": {"--color-primary":"#...", "--color-background":"#...",
   "--color-text":"#...", "--color-surface":"#..."},
+  "palette": {"id":"ai-generated", "name":"Paleta generada", "source":"ai"},
   "rules": [], "mediaQueries": [], "keyframes": []}}
 
 Reglas estrictas:
 - "styles.variables" tiene EXACTAMENTE esas 4 claves, cada una un color hex
   válido, coherente con el rubro/tono descrito por el usuario.
+- "styles.palette" describe el origen de la paleta con exactamente esos tres
+  campos: id seguro "ai-generated", nombre "Paleta generada" y source "ai".
 - "styles.rules", "styles.mediaQueries" y "styles.keyframes" van SIEMPRE
   vacíos ([]) — el estilo ya está resuelto con clases Tailwind en el árbol,
   no se escribe CSS propio acá.

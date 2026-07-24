@@ -255,3 +255,12 @@ class WizardImageUploadView(APIView):
             UploadedAssetSerializer(asset).data,
             status=status.HTTP_201_CREATED,
         )
+
+    def delete(self, request, asset_id):
+        """Delete an uploaded asset that the wizard no longer uses."""
+        asset = request.user.uploaded_assets.filter(pk=asset_id).first()
+        if not asset:
+            return Response(status=status.HTTP_404_NOT_FOUND)
+        asset.file.delete(save=False)
+        asset.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)

@@ -3,6 +3,7 @@ from apps.ai_assistant.tailwind_classes import (
     check_class_list,
     is_allowed_tailwind_class,
     iter_all_allowed_classes,
+    normalize_context_class_list,
 )
 
 
@@ -76,6 +77,17 @@ def test_check_class_list_accepts_valid_list():
 def test_check_class_list_rejects_disallowed_entry():
     try:
         check_class_list(["flex", "bg-hackery"])
+        raise AssertionError("expected SanitizationError")
+    except SanitizationError:
+        pass
+
+
+def test_context_normalization_drops_legacy_classes_without_weakening_output_check():
+    assert normalize_context_class_list(["site-header", "flex", "container"]) == ["flex"]
+    assert normalize_context_class_list("site-header flex container") == "flex"
+
+    try:
+        check_class_list(["site-header"])
         raise AssertionError("expected SanitizationError")
     except SanitizationError:
         pass

@@ -5,7 +5,14 @@ import json
 from django.conf import settings
 from rest_framework import serializers
 
-from .sanitize import ASSET_URL_PREFIX, MAX_ASSETS, SanitizationError, sanitize_node
+from apps.editor.palettes import PALETTE_ID_RE, get_palette_preset
+
+from .sanitize import (
+    ASSET_URL_PREFIX,
+    MAX_ASSETS,
+    SanitizationError,
+    sanitize_context_node,
+)
 
 
 class NonNegativeIntListField(serializers.ListField):
@@ -50,7 +57,7 @@ class TransformRequestSerializer(serializers.Serializer):
         node = attrs.get("selected_node")
         if node:
             try:
-                sanitize_node(node)
+                attrs["selected_node"] = sanitize_context_node(node)
             except SanitizationError as exc:
                 raise serializers.ValidationError({"selected_node": str(exc)}) from exc
         return attrs
@@ -126,3 +133,18 @@ class WizardGenerateRequestSerializer(WizardReviewRequestSerializer):
     assets = serializers.ListField(
         child=AssetInputSerializer(), required=False, default=list, max_length=MAX_ASSETS
     )
+    palette_id = serializers.CharField(
+        max_length=64, required=False, allow_blank=True, allow_null=True, default=None
+    )
+
+    def validate_palette_id(self, value):
+        if value in (None, ""):
+            return None
+        if get_palette_preset(value) is not None:
+            return value
+        request = self.context.get("request")
+        if not PALETTE_ID_RE.fullmatch(value) or not request:
+            raise serializers.ValidationError("unknown palette preset")
+        if not request.user.user_palettes.filter(slug=value).exists():
+            raise serializers.ValidationError("unknown palette preset")
+        return value

@@ -23,7 +23,17 @@ VALID_SKELETON = {
     # must force them back in rather than fail the whole generation.
 }
 
-VALID_STYLES = {"variables": {}, "rules": [], "mediaQueries": [], "keyframes": []}
+VALID_STYLES = {
+    "variables": {
+        "--color-primary": "#0f766e",
+        "--color-background": "#f0fdfa",
+        "--color-text": "#134e4a",
+        "--color-surface": "#ffffff",
+    },
+    "rules": [],
+    "mediaQueries": [],
+    "keyframes": [],
+}
 
 
 class _StubProvider:
@@ -53,7 +63,13 @@ def test_generate_document_forces_components_and_assets_even_if_model_omits_them
     state = done_events[0].state
     assert state["components"] == {}
     assert state["assets"] == {}
-    assert state["styles"] == VALID_STYLES
+    assert state["styles"]["variables"] == VALID_STYLES["variables"]
+    assert state["styles"]["palette"] == {
+        "id": "ai-generated",
+        "name": "Paleta generada",
+        "source": "ai",
+    }
+    assert state["styles"]["rules"] == []
 
 
 def test_generate_document_registers_provided_assets_server_side():
@@ -83,3 +99,53 @@ def test_generate_document_registers_provided_assets_server_side():
     assert state["assets"] == {
         "asset-0": {"url": "/media/wizard-uploads/x.jpg", "width": 800, "height": 600}
     }
+
+
+def test_generate_document_uses_selected_preset_without_ai_overwriting_it():
+    provider = _StubProvider(
+        [{"name": "Mi Negocio", "summary": "resumen", "document": dict(VALID_SKELETON)}]
+    )
+    service = WizardAIService(provider=provider, chat_provider=provider)
+
+    events = list(service.stream_generate_document("desc", {"brand": "x"}, [], palette_id="forest"))
+
+    state = [v for k, v in events if k == "done"][0].state
+    assert state["styles"]["palette"] == {
+        "id": "forest",
+        "name": "Bosque",
+        "source": "preset",
+    }
+    assert state["styles"]["variables"]["--color-primary"] == "#166534"
+
+
+def test_generate_document_uses_selected_user_palette_without_ai_overwriting_it():
+    provider = _StubProvider(
+        [{"name": "Mi Negocio", "summary": "resumen", "document": dict(VALID_SKELETON)}]
+    )
+    selected_palette = {
+        "id": "custom-mi-marca",
+        "name": "Mi marca",
+        "description": "Paleta guardada.",
+        "source": "custom",
+        "variables": {
+            "--color-primary": "#112233",
+            "--color-background": "#f8fafc",
+            "--color-text": "#0f172a",
+            "--color-surface": "#ffffff",
+        },
+    }
+    service = WizardAIService(provider=provider, chat_provider=provider)
+
+    events = list(
+        service.stream_generate_document(
+            "desc", {"brand": "x"}, [], selected_palette=selected_palette
+        )
+    )
+
+    state = [v for k, v in events if k == "done"][0].state
+    assert state["styles"]["palette"] == {
+        "id": "custom-mi-marca",
+        "name": "Mi marca",
+        "source": "custom",
+    }
+    assert state["styles"]["variables"] == selected_palette["variables"]

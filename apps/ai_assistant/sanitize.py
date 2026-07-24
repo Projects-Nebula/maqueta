@@ -271,6 +271,61 @@ def check_attributes(attributes: dict) -> None:
                 raise SanitizationError(f"{name} must be a digit string")
 
 
+def _normalize_context_node(node, *, _depth=0, _counter=None):
+    """Copy a node tree while removing legacy classes from AI context.
+
+    Existing saved pages can still use semantic classes backed by
+    ``styles.rules``. Those classes must not be mistaken for valid Tailwind
+    output, but they also must not make an otherwise safe selected node
+    unusable as model context.
+    """
+    if _counter is None:
+        _counter = [0]
+    _counter[0] += 1
+    if _counter[0] > MAX_NODE_COUNT:
+        raise SanitizationError("node tree too large")
+    if _depth > MAX_NODE_DEPTH:
+        raise SanitizationError("node tree too deep")
+    if not isinstance(node, dict):
+        return node
+
+    normalized = dict(node)
+    if node.get("type") != "element":
+        return normalized
+
+    attributes = node.get("attributes")
+    if isinstance(attributes, dict) and "class" in attributes:
+        from .tailwind_classes import normalize_context_class_list
+
+        normalized_attributes = dict(attributes)
+        class_value = normalize_context_class_list(attributes["class"])
+        if class_value:
+            normalized_attributes["class"] = class_value
+        else:
+            normalized_attributes.pop("class")
+        normalized["attributes"] = normalized_attributes
+
+    children = node.get("children")
+    if isinstance(children, list):
+        normalized["children"] = [
+            _normalize_context_node(child, _depth=_depth + 1, _counter=_counter)
+            for child in children
+        ]
+    return normalized
+
+
+def sanitize_context_node(node) -> dict:
+    """Validate and return a selected node safe to send as AI context.
+
+    This intentionally differs from ``sanitize_node`` only for legacy class
+    tokens. All structural, tag, attribute, URL, iframe, size, and depth
+    checks still use the same strict validator after normalization.
+    """
+    normalized = _normalize_context_node(node)
+    sanitize_node(normalized)
+    return normalized
+
+
 def sanitize_node(node, *, _depth=0, _counter=None) -> None:
     """Validate a single node tree; raise SanitizationError on any violation."""
     if _counter is None:

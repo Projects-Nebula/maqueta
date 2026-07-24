@@ -17,6 +17,8 @@ from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 
+from apps.editor.palettes import get_palette_preset, user_palette_for_client
+
 from .document_validation import DocumentValidationError
 from .providers import AIProviderError, AIProviderTimeout
 from .serializers import (
@@ -166,7 +168,9 @@ class WizardGenerateView(APIView):
     throttle_scope = "ai_wizard_generate"
 
     def post(self, request):
-        serializer = WizardGenerateRequestSerializer(data=request.data)
+        serializer = WizardGenerateRequestSerializer(
+            data=request.data, context={"request": request}
+        )
         if not serializer.is_valid():
             logger.warning(
                 "wizard generate invalid input for user %s: %s",
@@ -180,6 +184,16 @@ class WizardGenerateView(APIView):
         data = serializer.validated_data
         user_id = request.user.pk
         scope = self.throttle_scope
+        palette_id = data.get("palette_id")
+        selected_palette = get_palette_preset(palette_id)
+        if selected_palette is None and palette_id:
+            user_palette = request.user.user_palettes.filter(slug=palette_id).first()
+            if user_palette is None:
+                return Response(
+                    {"error": "invalid_input", "detail": "unknown palette"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            selected_palette = user_palette_for_client(user_palette)
 
         def event_stream():
             start_time = time.monotonic()
@@ -190,6 +204,8 @@ class WizardGenerateView(APIView):
                     data["answers"],
                     data.get("history", []),
                     assets=data.get("assets", []),
+                    palette_id=palette_id,
+                    selected_palette=selected_palette,
                 ):
                     if kind == "reasoning":
                         yield sse_event("reasoning", {"text": value})
