@@ -669,17 +669,14 @@
   // slightly different modal implementation.
   const elementModal = document.getElementById("elementModal");
   const sectionModal = document.getElementById("sectionModal");
-  const paymentLinkModal = document.getElementById("paymentLinkModal");
-  const imagePickerModal = document.getElementById("imagePickerModal");
-  const saveTemplateModal = document.getElementById("saveTemplateModal");
   const editorBackdrop = document.getElementById("editorModalBackdrop");
-  const modalElements = [
-    elementModal,
-    sectionModal,
-    paymentLinkModal,
-    imagePickerModal,
-    saveTemplateModal
-  ].filter(Boolean);
+  // Every real modal shares this class + role, template-defined or not —
+  // queried once at load rather than a hand-maintained id list, so a new
+  // modal added to editor.html (e.g. htmlImportModal, missed here once
+  // already) is picked up automatically instead of silently never opening.
+  // register() below extends this for modals built dynamically in JS
+  // (e.g. the command palette), which don't exist yet at this query time.
+  const modalElements = [...document.querySelectorAll('.panel-modal[role="dialog"]')];
   let activeModal = null;
   let restoreFocusTarget = null;
 
@@ -730,7 +727,13 @@
     closeAll: closeAllModals,
     open: openModal,
     isOpen: () => Boolean(activeModal),
-    getActive: () => activeModal
+    getActive: () => activeModal,
+    // For modals built dynamically in JS after this script already ran its
+    // one-time query above (e.g. the command palette) — a no-op if el is
+    // already registered, so callers don't need to track that themselves.
+    register: (el) => {
+      if (el && !modalElements.includes(el)) modalElements.push(el);
+    }
   };
 
   function openEditorModal() {

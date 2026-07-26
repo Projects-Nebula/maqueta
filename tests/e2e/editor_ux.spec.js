@@ -40,6 +40,56 @@ test("quick-insert presets render styled sections", async ({ page }) => {
   await expect(frame.locator("section .bg-indigo-600").last()).toBeVisible();
 });
 
+test("Pegar HTML button opens its modal", async ({ page }) => {
+  await login(page);
+  await expect(page.locator("#htmlImportModal")).not.toBeVisible();
+  await page.click("#htmlImportButton");
+  await expect(page.locator("#htmlImportModal")).toBeVisible();
+});
+
+test("elementModal opens via selecting a node then clicking Editar", async ({ page }) => {
+  await login(page);
+  const frame = page.frameLocator("#previewFrame");
+  const firstNode = frame.locator("[data-vjpb-path]").first();
+  await firstNode.waitFor({ state: "visible", timeout: 10000 });
+  await firstNode.click();
+  await expect(frame.locator("#vjpb-actions")).toBeVisible();
+  // The action bar's buttons are icon-only (textContent is just the glyph) —
+  // the label lives in aria-label/title, not visible text.
+  const editButton = frame.locator('#vjpb-actions button[aria-label="Editar"]');
+  await expect(editButton).toBeVisible();
+  await editButton.click();
+  await expect(page.locator("#elementModal")).toBeVisible();
+});
+
+test("paymentLinkModal opens on double-clicking a link/button preview node", async ({ page }) => {
+  await login(page);
+  const frame = page.frameLocator("#previewFrame");
+  const linkOrButton = frame.locator("a, button").first();
+  await linkOrButton.waitFor({ state: "visible", timeout: 10000 });
+  await linkOrButton.dblclick();
+  await expect(page.locator("#paymentLinkModal")).toBeVisible();
+});
+
+test("imagePickerModal opens on double-clicking an img preview node", async ({ page }) => {
+  await login(page);
+  await page.locator('.section-open[data-section="content"]').click();
+  const sectionModal = page.locator("#sectionModal");
+  await expect(sectionModal).toBeVisible();
+  const frame = page.frameLocator("#previewFrame");
+  await sectionModal.locator('[data-preset="image"]').click();
+  const img = frame.locator("img.rounded-2xl").last();
+  await expect(img).toBeVisible();
+
+  // sectionModal visually overlaps the preview and intercepts the
+  // double-click otherwise.
+  await page.keyboard.press("Escape");
+  await expect(sectionModal).not.toBeVisible();
+
+  await img.dblclick();
+  await expect(page.locator("#imagePickerModal")).toBeVisible();
+});
+
 test("AI assistant edits a legacy-class preview node", async ({ page }) => {
   await login(page);
 
