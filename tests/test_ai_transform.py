@@ -2,6 +2,7 @@ import pytest
 
 from apps.ai_assistant.operations import OperationValidationError
 from apps.ai_assistant.providers import AIProviderError, AIProviderTimeout
+from apps.editor.models import AuditEvent
 from tests.sse_helpers import parse_sse as _parse_sse
 from tests.sse_helpers import sse_body as _sse_body
 
@@ -56,6 +57,13 @@ def test_valid_request_returns_operations(api):
     done = dict(events)["done"]
     assert "summary" in done
     assert isinstance(done["operations"], list) and done["operations"]
+
+
+def test_valid_request_writes_an_audit_event(api, user):
+    response = api.post(URL, _payload(), format="json")
+    _sse_body(response)  # StreamingHttpResponse only runs once consumed.
+    events = AuditEvent.objects.filter(owner=user, action=AuditEvent.Action.AI_TRANSFORM)
+    assert events.count() == 1
 
 
 def test_valid_request_with_history(api):

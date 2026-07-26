@@ -8,7 +8,7 @@ from django.shortcuts import render
 from django.utils.decorators import method_decorator
 from django.views.decorators.cache import never_cache
 from django.views.decorators.csrf import ensure_csrf_cookie
-from rest_framework import status, viewsets
+from rest_framework import generics, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.parsers import MultiPartParser
 from rest_framework.permissions import AllowAny, IsAuthenticated
@@ -19,10 +19,18 @@ from rest_framework.views import APIView
 from apps.projects.models import Project
 
 from .image_processing import ImageProcessingError, process_upload
-from .models import Template, UploadedAsset, UserPalette, UserTemplate, UserTemplateRevision
+from .models import (
+    AuditEvent,
+    Template,
+    UploadedAsset,
+    UserPalette,
+    UserTemplate,
+    UserTemplateRevision,
+)
 from .palettes import palette_catalog_for_client
 from .rendering import public_page_html
 from .serializers import (
+    AuditEventSerializer,
     UploadedAssetSerializer,
     UserPaletteSerializer,
     UserTemplateRevisionSerializer,
@@ -170,7 +178,14 @@ class UserTemplateViewSet(viewsets.ModelViewSet):
         return UserTemplate.objects.filter(owner=self.request.user)
 
     def perform_create(self, serializer):
-        serializer.save(owner=self.request.user)
+        instance = serializer.save(owner=self.request.user)
+        AuditEvent.record(
+            owner=self.request.user,
+            action=AuditEvent.Action.TEMPLATE_CREATE,
+            target_type="user_template",
+            target_id=instance.pk,
+            metadata={"name": instance.name},
+        )
 
     def perform_update(self, serializer):
         # Snapshot the state being replaced so the update can be rolled back
@@ -188,6 +203,13 @@ class UserTemplateViewSet(viewsets.ModelViewSet):
                 :REVISION_RETENTION_LIMIT
             ]
             instance.revisions.exclude(pk__in=list(keep_ids)).delete()
+            AuditEvent.record(
+                owner=self.request.user,
+                action=AuditEvent.Action.TEMPLATE_SAVE,
+                target_type="user_template",
+                target_id=instance.pk,
+                metadata={"name": instance.name, "version": next_version},
+            )
         serializer.save()
 
     @action(detail=True, methods=["get"])
@@ -217,6 +239,19 @@ class UserTemplateViewSet(viewsets.ModelViewSet):
         user_template = self.get_object()  # already owner-scoped via get_queryset
         user_template.unpublish()
         return Response(UserTemplateSerializer(user_template).data)
+
+
+class AuditEventListView(generics.ListAPIView):
+    """GET /api/audit-events/ — the requesting user's own recent audit trail
+    (which AI instruction/save produced a given change), read-only."""
+
+    serializer_class = AuditEventSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        # Retention (AuditEvent.record) already caps this per owner — the
+        # slice here is defensive, not the primary bound.
+        return AuditEvent.objects.filter(owner=self.request.user)[: AuditEvent.RETENTION_LIMIT]
 
 
 class WizardImageUploadView(APIView):

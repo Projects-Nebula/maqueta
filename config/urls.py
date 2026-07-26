@@ -6,6 +6,8 @@ from django.http import JsonResponse
 from django.urls import include, path
 from django.views.static import serve as serve_media
 
+from apps.editor.views import AuditEventListView
+
 
 def healthcheck(_request):
     return JsonResponse({"status": "ok"})
@@ -20,6 +22,7 @@ urlpatterns = [
     path("api/projects/", include("apps.projects.urls")),
     path("api/user-templates/", include("apps.editor.api_urls")),
     path("api/user-palettes/", include("apps.editor.palette_api_urls")),
+    path("api/audit-events/", AuditEventListView.as_view(), name="audit-events"),
     path("", include("apps.storefront.urls")),
     path("api/products/", include("apps.storefront.api_urls")),
     path("api/payment-gateway-configs/", include("apps.storefront.payment_config_api_urls")),

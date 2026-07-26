@@ -24,6 +24,8 @@
   var nameInput = document.getElementById("saveTemplateNameInput");
   var historyToggle = document.getElementById("saveTemplateHistoryToggle");
   var historyList = document.getElementById("saveTemplateHistoryList");
+  var activityToggle = document.getElementById("saveTemplateActivityToggle");
+  var activityList = document.getElementById("saveTemplateActivityList");
   var publishBtn = document.getElementById("saveTemplatePublishBtn");
   var unpublishBtn = document.getElementById("saveTemplateUnpublishBtn");
   var publicUrlEl = document.getElementById("saveTemplatePublicUrl");
@@ -31,6 +33,14 @@
 
   var userTemplateId = document.body.dataset.userTemplateId || "";
   var historyOpen = false;
+  var activityOpen = false;
+
+  var ACTIVITY_LABELS = {
+    ai_transform: "Edición con IA",
+    ai_wizard_generate: "Generado con el asistente",
+    template_create: "Template creado",
+    template_save: "Template actualizado",
+  };
 
   function notify(message, tone) {
     if (window.EditorCore && window.EditorCore.showToast) {
@@ -105,9 +115,13 @@
     var hasUserTemplate = !!userTemplateId;
     updateBtn.classList.toggle("hidden", !hasUserTemplate);
     historyToggle.classList.toggle("hidden", !hasUserTemplate);
+    activityToggle.classList.toggle("hidden", !hasUserTemplate);
     historyOpen = false;
     historyList.classList.add("hidden");
     historyList.innerHTML = "";
+    activityOpen = false;
+    activityList.classList.add("hidden");
+    activityList.innerHTML = "";
     nameInput.value = "";
     if (window.EditorModals) {
       window.EditorModals.open(modal, saveButton);
@@ -200,6 +214,43 @@
     }
   }
 
+  function renderActivity(events) {
+    activityList.innerHTML = "";
+    if (!events.length) {
+      activityList.textContent = "Todavía no hay actividad registrada.";
+      return;
+    }
+    events.forEach(function (event) {
+      var row = document.createElement("div");
+      row.className = "ai-history-row";
+      var label = document.createElement("span");
+      var name = ACTIVITY_LABELS[event.action] || event.action;
+      var detail = (event.metadata && (event.metadata.instruction || event.metadata.name)) || "";
+      label.textContent =
+        name +
+        (detail ? " · " + detail : "") +
+        " · " +
+        new Date(event.created_at).toLocaleString("es");
+      row.appendChild(label);
+      activityList.appendChild(row);
+    });
+  }
+
+  async function loadActivity() {
+    activityList.classList.remove("hidden");
+    activityList.textContent = "Cargando…";
+    try {
+      var response = await fetch("/api/audit-events/", { credentials: "same-origin" });
+      if (!response.ok) {
+        activityList.textContent = "No se pudo cargar la actividad.";
+        return;
+      }
+      renderActivity(await response.json());
+    } catch (e) {
+      activityList.textContent = "No se pudo cargar la actividad.";
+    }
+  }
+
   async function restoreRevision(rev) {
     try {
       var response = await fetch("/api/user-templates/" + encodeURIComponent(userTemplateId) + "/", {
@@ -236,6 +287,15 @@
       loadHistory();
     } else {
       historyList.classList.add("hidden");
+    }
+  });
+
+  activityToggle.addEventListener("click", function () {
+    activityOpen = !activityOpen;
+    if (activityOpen) {
+      loadActivity();
+    } else {
+      activityList.classList.add("hidden");
     }
   });
 

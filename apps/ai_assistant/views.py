@@ -10,6 +10,7 @@ from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 
+from apps.editor.models import AuditEvent
 from apps.storefront.models import PaymentGatewayConfig, Product
 from apps.storefront.views import _gateway_display_names
 
@@ -96,6 +97,15 @@ class EditorTransformView(APIView):
                     if kind == "reasoning":
                         yield sse_event("reasoning", {"text": value})
                     else:
+                        AuditEvent.record(
+                            owner=request.user,
+                            action=AuditEvent.Action.AI_TRANSFORM,
+                            target_type="editor_session",
+                            metadata={
+                                "instruction": context.instruction[:200],
+                                "operation_count": len(value.operations),
+                            },
+                        )
                         yield sse_event(
                             "done",
                             {

@@ -17,6 +17,7 @@ from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 
+from apps.editor.models import AuditEvent
 from apps.editor.palettes import get_palette_preset, user_palette_for_client
 
 from .document_validation import DocumentValidationError
@@ -210,6 +211,12 @@ class WizardGenerateView(APIView):
                     if kind == "reasoning":
                         yield sse_event("reasoning", {"text": value})
                     else:
+                        AuditEvent.record(
+                            owner=request.user,
+                            action=AuditEvent.Action.AI_WIZARD_GENERATE,
+                            target_type="editor_session",
+                            metadata={"name": value.name},
+                        )
                         yield sse_event(
                             "done",
                             {

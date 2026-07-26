@@ -119,6 +119,59 @@ class UserTemplateRevision(models.Model):
         return f"{self.user_template_id} v{self.version}"
 
 
+class AuditEvent(models.Model):
+    """A record of a server-mediated mutating action, for traceability —
+    e.g. which AI instruction produced a given UserTemplateRevision. Only
+    ever written server-side after the action already succeeded; adds no new
+    trust boundary. Purely client-side actions (e.g. applying a palette
+    preset, which never round-trips through the server) are not logged here
+    — logging them would mean adding a server endpoint just to log, which
+    isn't worth it without another reason to have one."""
+
+    class Action(models.TextChoices):
+        AI_TRANSFORM = "ai_transform"
+        AI_WIZARD_GENERATE = "ai_wizard_generate"
+        TEMPLATE_CREATE = "template_create"
+        TEMPLATE_SAVE = "template_save"
+
+    # Grows on every AI call, unlike UserTemplateRevision — cap per owner the
+    # same way (record() prunes right after inserting) so metadata (AI
+    # instruction text) doesn't accumulate forever with no retention path,
+    # matching the precedent every other retained-user-data model here sets.
+    RETENTION_LIMIT = 100
+
+    owner = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="audit_events"
+    )
+    action = models.CharField(max_length=32, choices=Action.choices)
+    target_type = models.CharField(max_length=32, blank=True)
+    target_id = models.PositiveIntegerField(null=True, blank=True)
+    metadata = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.owner_id}:{self.action}@{self.created_at:%Y-%m-%d %H:%M}"
+
+    @classmethod
+    def record(cls, *, owner, action, target_type="", target_id=None, metadata=None):
+        """Create an event and prune this owner's events to RETENTION_LIMIT."""
+        event = cls.objects.create(
+            owner=owner,
+            action=action,
+            target_type=target_type,
+            target_id=target_id,
+            metadata=metadata or {},
+        )
+        keep_ids = cls.objects.filter(owner=owner).values_list("pk", flat=True)[
+            : cls.RETENTION_LIMIT
+        ]
+        cls.objects.filter(owner=owner).exclude(pk__in=list(keep_ids)).delete()
+        return event
+
+
 class UploadedAsset(models.Model):
     """An image a user uploaded for the wizard, already resized/re-encoded
     server-side (see apps.editor.image_processing) — never the raw upload."""
