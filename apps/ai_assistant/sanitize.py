@@ -143,7 +143,7 @@ CSS_PROPERTY_ALLOWLIST = {
 
 # CSS values must not smuggle in code or external fetches.
 CSS_VALUE_FORBIDDEN = re.compile(
-    r"(expression\s*\(|javascript:|@import|url\s*\(\s*[\"']?\s*(?!#|/|data:image/))",
+    r"(expression\s*\(|javascript:|@import|url\s*\(\s*[\"']?\s*(?!#|/|data:image/)|[<>{}])",
     re.IGNORECASE,
 )
 
