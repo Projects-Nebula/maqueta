@@ -14,9 +14,10 @@ from apps.editor.models import AuditEvent
 from apps.storefront.models import PaymentGatewayConfig, Product
 from apps.storefront.views import _gateway_display_names
 
+from .html_import import HtmlImportError, html_to_node
 from .operations import OperationValidationError
 from .providers import AIProviderError, AIProviderTimeout
-from .serializers import TransformRequestSerializer
+from .serializers import ImportHtmlRequestSerializer, TransformRequestSerializer
 from .service import EditorAIService, EditorContext
 from .sse import first_error, sse_event
 from .usage_logging import log_ai_usage
@@ -142,3 +143,36 @@ class EditorTransformView(APIView):
         response["Cache-Control"] = "no-cache"
         response["X-Accel-Buffering"] = "no"
         return response
+
+
+class ImportHtmlView(APIView):
+    """POST /api/ai/editor/import-html/ — paste external HTML, get back a
+    sanitized node ready for the client's existing add_node operation.
+
+    Not AI-authored (see html_import.py's docstring): synchronous, no SSE,
+    no provider call. The raw `class` attribute is always dropped; a small
+    allowlisted set of `style` declarations is mapped to their Tailwind
+    equivalent (STYLE_TO_TAILWIND), everything else in `style` is dropped
+    too — skipped_attributes tells the client how many declarations/
+    attributes were actually dropped so it can say so instead of silently
+    changing the paste.
+    """
+
+    permission_classes = [IsAuthenticated]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "html_import"
+
+    def post(self, request):
+        serializer = ImportHtmlRequestSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(
+                {"error": "invalid_input", "detail": first_error(serializer.errors)},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        try:
+            node, skipped_attrs = html_to_node(serializer.validated_data["html"])
+        except HtmlImportError as exc:
+            return Response(
+                {"error": "invalid_html", "detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST
+            )
+        return Response({"node": node, "skipped_attributes": skipped_attrs})

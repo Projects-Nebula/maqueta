@@ -7,6 +7,7 @@ from rest_framework import serializers
 
 from apps.editor.palettes import PALETTE_ID_RE, get_palette_preset
 
+from .html_import import MAX_IMPORT_HTML_LENGTH
 from .sanitize import (
     ASSET_URL_PREFIX,
     MAX_ASSETS,
@@ -61,6 +62,10 @@ class TransformRequestSerializer(serializers.Serializer):
             except SanitizationError as exc:
                 raise serializers.ValidationError({"selected_node": str(exc)}) from exc
         return attrs
+
+
+class ImportHtmlRequestSerializer(serializers.Serializer):
+    html = serializers.CharField(max_length=MAX_IMPORT_HTML_LENGTH, trim_whitespace=True)
 
 
 # --- Template-creation wizard requests --------------------------------------

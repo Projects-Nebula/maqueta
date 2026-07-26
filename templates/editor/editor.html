@@ -26,6 +26,7 @@
         <button class="btn" id="undoButton" type="button" title="Deshacer (Ctrl/Cmd + Z)" aria-label="Deshacer" disabled>↶ <span class="btn-label">Deshacer</span></button>
         <button class="btn" id="redoButton" type="button" title="Rehacer (Ctrl/Cmd + Shift + Z)" aria-label="Rehacer" disabled>↷ <span class="btn-label">Rehacer</span></button>
         <button class="btn" id="importButton" type="button" aria-label="Importar JSON">↥ <span class="btn-label">Importar JSON</span></button>
+        <button class="btn" id="htmlImportButton" type="button" aria-controls="htmlImportModal" aria-expanded="false">✂ <span class="btn-label">Pegar HTML</span></button>
         <button class="btn" id="copyButton" type="button" aria-label="Copiar JSON">⧉ <span class="btn-label">Copiar JSON</span></button>
         <button class="btn success" id="saveTemplateButton" type="button" aria-controls="saveTemplateModal" aria-expanded="false">☆ <span class="btn-label">Guardar</span></button>
         <button class="btn success hidden" id="saveTemplatePublishBtn" type="button">Publicar</button>
@@ -277,6 +278,17 @@
         </div>
       </section>
 
+      <section class="panel-modal ai-save-modal hidden" id="htmlImportModal" role="dialog" aria-modal="true" aria-labelledby="htmlImportModalTitle" aria-describedby="htmlImportModalHelp" aria-hidden="true">
+        <button id="htmlImportModalClose" class="editor-modal-close" type="button" aria-label="Cerrar">×</button>
+        <h2 class="panel-title" id="htmlImportModalTitle">Pegar HTML</h2>
+        <p class="panel-help" id="htmlImportModalHelp">Pegá un fragmento de HTML para agregarlo al final de la página. Las clases propias no se conservan; algunos estilos comunes (alineación, negrita, cursiva, subrayado) se convierten automáticamente — el resto podés dárselo después con el panel o la IA.</p>
+        <label class="field">
+          <span>HTML</span>
+          <textarea class="control" id="htmlImportTextarea" rows="8" placeholder="&lt;div&gt;...&lt;/div&gt;"></textarea>
+        </label>
+        <button class="btn success" id="htmlImportConfirmBtn" type="button">Importar</button>
+      </section>
+
       <section class="panel-modal ai-save-modal hidden" id="saveTemplateModal" role="dialog" aria-modal="true" aria-labelledby="saveTemplateModalTitle" aria-describedby="saveTemplateModalHelp" aria-hidden="true">
         <button id="saveTemplateModalClose" class="editor-modal-close" type="button" aria-label="Cerrar">×</button>
         <h2 class="panel-title" id="saveTemplateModalTitle">Guardar template</h2>
@@ -366,6 +378,7 @@
   <script src="{% static 'editor/editor-core.js' %}"></script>
   <script src="{% static 'editor/editor-ai.js' %}"></script>
   <script src="{% static 'editor/save-template.js' %}"></script>
+  <script src="{% static 'editor/html-import.js' %}"></script>
   <script src="{% static 'editor/autosave.js' %}"></script>
 
   <script src="{% static 'editor/seed-loader.js' %}"></script>
