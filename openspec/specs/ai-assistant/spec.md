@@ -69,6 +69,13 @@ The AI SHALL return only `{summary, operations}` where every operation is one of
 - AND the complete palette contract remains defined in
   `openspec/specs/editor/palettes.md`
 
+#### Scenario: CSS values cannot break out of the rendered style block
+- WHEN a `set_css_declaration` or `set_style_variable` value contains
+  `<`, `>`, `{`, or `}` (in addition to `expression()`, `javascript:`,
+  `@import`, or an unsafe `url()`)
+- THEN validation rejects it, since these values are interpolated into a
+  server-rendered `<style>` block as a raw string, not through the DOM
+
 ## Requirement: Swappable provider
 The system SHALL depend on an `AIProvider` interface with these implementations,
 selected by `AI_PROVIDER`:

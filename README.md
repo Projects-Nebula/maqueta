@@ -73,6 +73,16 @@ Request flow for the template wizard (`/wizard/`):
    its own, it just produces a document the normal save flow already knows
    how to store.
 
+Two smaller, non-AI endpoints round out the editor:
+
+- `POST /api/ai/editor/import-html/` — "Pegar HTML" in the editor topbar.
+  Synchronous (no SSE, no provider call): converts pasted external markup
+  into a single sanitized node through the same validation AI-authored
+  operations go through, then the client `add_node`s it.
+- `GET /api/audit-events/` — the requesting user's own recent audit trail
+  (which AI instruction or save produced a given change), owner-scoped,
+  read-only, surfaced as the save modal's "Actividad" panel.
+
 ## Requirements
 
 - Python 3.12

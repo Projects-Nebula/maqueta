@@ -8,6 +8,51 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **Owner-scoped audit log.** `AuditEvent` records `ai_transform`,
+  `ai_wizard_generate`, `template_create`, and `template_save` actions
+  (owner, target, small metadata blob), surfaced as an "Actividad" panel in
+  the save modal next to "Historial" — closes the gap where the only trail
+  of which AI instruction produced a revision was `server.log`.
+  `AuditEvent.record()` prunes each owner to the most recent 100 events on
+  every write, so the table never grows unbounded.
+- **Upload thumbnail placeholder color.** `UploadedAsset.placeholder_color`
+  (a one-pixel average color computed at upload time) shows as a
+  `background-color` behind wizard/editor image thumbnails while they load.
+- **HTML paste import.** "Pegar HTML" in the editor topbar converts pasted
+  external markup into a sanitized node via the same `sanitize_node` gate as
+  AI-authored content (`POST /api/ai/editor/import-html/`). The raw `class`
+  attribute is always dropped; a small allowlisted set of `style`
+  declarations (alignment, bold, italic, underline) maps to their exact
+  Tailwind class instead of being discarded, each re-validated through the
+  existing allowlist.
+- **Command palette.** `Ctrl/Cmd+K` opens a filtered list of the editor's
+  always-available topbar actions (Guardar, Deshacer, Rehacer, Pegar HTML,
+  Importar/Descargar/Copiar JSON) plus the six quick-insert section presets
+  (Hero, Beneficios, Texto, Imagen, Llamado, Footer). Registered with the
+  shared `EditorModals` dialog manager, so it gets Tab-trapping and
+  focus-restore-to-trigger like every other editor dialog.
+
+### Fixed
+
+- **CSS-value style-tag breakout.** `check_css_declaration`/
+  `check_css_variable` now also reject `< > { }` in a CSS value — a crafted
+  value could previously break out of the server-rendered inline `<style>`
+  block on published pages (`apps/editor/rendering.py`'s raw string
+  interpolation).
+- **`payu_redirect.html`'s inline auto-redirect script was silently
+  CSP-blocked** (`script-src 'self'`, no `'unsafe-inline'`) — the 250ms
+  auto-submit to PayU never ran (the manual "Continuar" button still
+  worked). Moved to `static/storefront/payu-redirect.js`.
+- **"Pegar HTML" silently did nothing.** `EditorModals` (`editor-ai.js`)
+  kept a hand-maintained 5-modal array that `#htmlImportModal` was never
+  added to, so `EditorModals.open()` never actually made it visible —
+  undetected by any existing test. Fixed at the root: `EditorModals` now
+  discovers every `.panel-modal[role="dialog"]` by query at load instead of
+  a hand-maintained list, closing this bug class for future modals too, plus
+  a new `EditorModals.register()` for modals built dynamically in JS (used
+  by the command palette). All 6 shared dialogs plus the command palette now
+  have e2e coverage that they actually open.
+
 - **Deterministic local mockup loader.** `mockup.sh` starts local PostgreSQL,
   migrates, flushes the development database and referenced media files, then
   seeds users, templates, projects, palettes, assets, products, payment

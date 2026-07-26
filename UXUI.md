@@ -199,6 +199,35 @@ Before shipping any new page, form, modal, or storefront operation:
    `learnings.jsonl` record after an audit or implementation changes the
    documented state.
 
+## 9. Addendum — 2026-07-25
+
+Three new interactive surfaces shipped after the 2026-07-24 pass, plus one
+fix to the shared dialog manager itself (`BACKLOG.csv` rows 71–83,
+`PROPOSAL.md`/`PLAN.md`/`REVIEW.md`):
+
+- **`#htmlImportModal`** ("Pegar HTML") — added, then found (via this
+  file's own rule 4, "verify close/backdrop/Escape/Tab/focus in a real
+  browser") to never actually open at all: `EditorModals` kept a
+  hand-maintained 5-modal array that this new modal was never added to.
+  Fixed at the root, not just the missing entry — `EditorModals`
+  (`editor-ai.js`) now discovers every `.panel-modal[role="dialog"]` by
+  query at load instead of a hand-maintained list, so this class of bug
+  can't recur for a future template-defined modal.
+- **Command palette (`Ctrl/Cmd+K`)** — a JS-built overlay, not
+  template-defined, so it needed one addition to the pattern above:
+  `EditorModals.register(el)` for modals constructed after the one-time
+  query already ran. Registered, gaining the same Tab-trap/Escape/
+  focus-restore contract every other dialog has for free.
+- **"Actividad" panel** in the save modal (owner-scoped AI/save audit
+  trail) — read-only list, no new interaction pattern, no dialog of its
+  own.
+
+All 6 shared dialogs plus the command palette now have e2e coverage that
+they open (`tests/e2e/editor_ux.spec.js`, `tests/e2e/command_palette.spec.js`)
+— per rule 4, discovering `#htmlImportModal`'s dead-open bug live is exactly
+why that rule exists, and it's now closed. No open P0/P1/P2 gap from this
+addendum; nothing here reopens the historical tables in section 3.
+
 ## 8. Source-of-truth records
 
 - `BACKLOG.csv` — prioritized work items and verification state.

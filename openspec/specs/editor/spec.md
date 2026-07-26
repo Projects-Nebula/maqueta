@@ -81,6 +81,92 @@ owner-scoped.
 - AND deleting a revision (`DELETE …/revisions/<rev>/`) removes only that
   owner's revision (others 404)
 
+## Requirement: Audit log
+Server-mediated mutating actions (`ai_transform`, `ai_wizard_generate`,
+`template_create`, `template_save`) SHALL be recorded as owner-scoped
+`AuditEvent` rows and exposed read-only via `GET /api/audit-events/`.
+Purely client-side actions (e.g. applying a palette preset) are not logged,
+since there is no server round-trip to hook a write into.
+
+#### Scenario: AI edit is traceable
+- WHEN the AI transform endpoint successfully produces validated operations
+- THEN an `AuditEvent` records the instruction (truncated) and operation
+  count for the requesting user
+- AND it is visible to that user in the save modal's "Actividad" panel
+
+#### Scenario: Audit events are owner-scoped
+- WHEN a user requests `GET /api/audit-events/`
+- THEN only that user's own events are returned, never another user's
+
+#### Scenario: Events are retained, not accumulated forever
+- WHEN `AuditEvent.record()` creates a new event for an owner
+- THEN that owner's events are pruned to the most recent
+  `AuditEvent.RETENTION_LIMIT` (100) immediately after — no purge command or
+  scheduled job required
+
+## Requirement: Upload thumbnail placeholder color
+`UploadedAsset` SHALL store a one-pixel average color computed at upload
+time (`placeholder_color`), shown as a `background-color` behind the
+thumbnail in the wizard's upload strip and the editor's saved-image picker
+while the real file loads.
+
+#### Scenario: Placeholder reflects the image
+- WHEN an image is uploaded via `POST /api/user-templates/wizard-images/`
+- THEN the response includes `placeholder_color` matching the image's
+  one-pixel downsample
+
+## Requirement: HTML paste import
+The editor SHALL provide a "Pegar HTML" action that converts pasted external
+HTML into a single sanitized node via `POST /api/ai/editor/import-html/`,
+routed through the same `sanitize_node` gate as AI-authored operations. The
+raw `class` attribute SHALL always be dropped. A small allowlisted set of
+`style` declarations (`STYLE_TO_TAILWIND`: `text-align`, `font-weight`,
+`font-style`, `text-decoration`) SHALL be mapped to their exact Tailwind
+equivalent, each re-validated through `is_allowed_tailwind_class`; anything
+else is dropped. The response SHALL report how many attributes/declarations
+were actually still dropped after mapping.
+
+#### Scenario: Forbidden content is rejected
+- WHEN the pasted HTML contains a forbidden tag (e.g. `<script>`)
+- THEN the import endpoint returns 400 `invalid_html` and nothing is added
+  to the document
+
+#### Scenario: Class is always dropped, known style declarations are mapped
+- WHEN the pasted HTML has a `class` attribute
+- THEN the resulting node never has it, regardless of `style`
+- WHEN the pasted HTML has a `style` declaration matching `STYLE_TO_TAILWIND`
+  exactly (e.g. `text-align: center`)
+- THEN the resulting node's `class` list includes the mapped Tailwind class
+  (e.g. `text-center`)
+- AND any other `style` declaration is dropped and counted in
+  `skipped_attributes`, never silently guessed at
+
+## Requirement: Command palette
+The editor SHALL provide a `Ctrl/Cmd+K` command palette listing the
+always-available topbar actions (Guardar, Deshacer, Rehacer, Pegar HTML,
+Importar/Descargar/Copiar JSON) plus the six quick-insert section presets
+(Hero, Beneficios, Texto, Imagen, Llamado, Footer), filterable by typing,
+dispatching by invoking the matching existing button or preset element
+(quick-insert presets dispatch correctly even while `#sectionModal` is
+closed — their handler only touches `state` and CSS classes on elements
+already in the DOM). The palette's own overlay SHALL be registered with the
+shared `EditorModals` system (see "Modal editing UI") rather than
+hand-rolling open/close, so it gets the same Tab-trapping and
+focus-restore-to-trigger every other editor dialog has.
+
+#### Scenario: Open, filter, run
+- WHEN the user presses `Ctrl/Cmd+K` and types part of a command's label
+- THEN only matching commands remain visible
+- AND selecting one closes the palette and runs that command's existing
+  button or preset action
+
+#### Scenario: Closing restores focus and Tab stays trapped
+- WHEN the palette is open and the user presses `Escape`
+- THEN the palette closes and focus returns to whatever element triggered
+  `Ctrl/Cmd+K`
+- WHEN the palette is open and the user presses `Tab` repeatedly
+- THEN focus never leaves the palette's own focusable elements
+
 ## Requirement: Preserve existing editor behavior
 The split SHALL keep all original features working: iframe element selection,
 `selectedPath`, central `state`, undo/redo history, drag & drop, JSON
@@ -104,6 +190,26 @@ Duplicar / Eliminar buttons reuse the core's existing hidden `#duplicateButton`
   any `[data-vjpb-path]` element and outside the action bar)
 - THEN `EditorCore.clearSelection()` runs, the selection clears, the action bar
   disappears, and the context chip shows "no element selected"
+
+Every dialog (`#elementModal`, `#sectionModal`, `#paymentLinkModal`,
+`#imagePickerModal`, `#saveTemplateModal`, `#htmlImportModal`, and the
+command palette overlay) SHARES one keyboard/focus policy
+(`EditorModals` in `editor-ai.js`): Escape closes, Tab is trapped inside
+the open dialog, and focus returns to the trigger on close. The set of
+template-defined dialogs is discovered by querying every
+`.panel-modal[role="dialog"]` element once at load — a new template-defined
+modal is picked up automatically, it does not need to be added to a
+hand-maintained list (a hand-maintained 5-entry list previously missed
+`#htmlImportModal`, which silently never opened — see `BACKLOG.csv` row
+81). A modal built dynamically in JS after that one-time query (e.g. the
+command palette) must call `EditorModals.register(el)` once, after building
+it, to join the same system.
+
+#### Scenario: A new template-defined modal joins the system with no extra wiring
+- WHEN a new `<section class="panel-modal" role="dialog">` element is added
+  to `editor.html`
+- THEN `EditorModals` discovers it automatically at the next page load,
+  with no change needed to `editor-ai.js`
 
 ## Requirement: AI panel
 The system SHALL provide an "Asistente IA" panel with an instruction field,

@@ -43,18 +43,24 @@ token/device flow is needed.
 config/            settings base/development/production, urls, CSP middleware, wsgi/asgi
 apps/accounts      login/logout
 apps/editor        serves /editor/ /home/ /gallery/ /wizard/; Template ·
-                   UserTemplate · UserTemplateRevision · UserPalette models,
-                   admin, owner-scoped UserTemplate and UserPalette DRF APIs
-                   (template revisions history/restore/delete); palette
-                   catalog/validation; ensure_csrf_cookie
+                   UserTemplate · UserTemplateRevision · UserPalette ·
+                   UploadedAsset (gained placeholder_color) · AuditEvent
+                   (owner-scoped, self-pruning via AuditEvent.record(),
+                   see gotchas) models, admin, owner-scoped UserTemplate
+                   and UserPalette DRF APIs (template revisions
+                   history/restore/delete), GET /api/audit-events/;
+                   palette catalog/validation; ensure_csrf_cookie
 apps/ai_assistant  sanitize · operations · providers (Anthropic/OpenAI-compatible/
                    fake, model-based routing) · schema · prompts · service
                    (EditorAIService: chat model clarifies instruction → main
                    model generates operations) · serializers · views (edit-time
-                   transform) · wizard_service (WizardAIService: same two-role
-                   split; generate is itself 2 calls — structure then palette)
-                   · wizard_views · document_validation (sanitizes a FULL
-                   generated document, strict key checks at every level) · sse
+                   transform; also POST /api/ai/editor/import-html/, non-AI) ·
+                   html_import (deterministic HTML→node converter, same
+                   sanitize_node gate as AI operations) · wizard_service
+                   (WizardAIService: same two-role split; generate is itself
+                   2 calls — structure then palette) · wizard_views ·
+                   document_validation (sanitizes a FULL generated document,
+                   strict key checks at every level) · sse
 apps/projects      Project + ProjectRevision API (owner-scoped)
 apps/storefront    Product · Order (gateway-scoped) · PaymentGatewayConfig
                    (owner-scoped, encrypted credentials) models; ProductViewSet
@@ -76,8 +82,10 @@ templates/         registration/login · editor/editor.html · editor/home.html 
                    storefront/success.html · storefront/checkout_cancel.html ·
                    storefront/payu_redirect.html
                    analytics/dashboard.html
-static/editor/     editor.css · editor-core.js · editor-ai.js · seed-loader.js ·
-                   save-template.js · wizard.css · template-wizard.js ·
+static/editor/     editor.css · editor-core.js · editor-ai.js (also owns the
+                   shared EditorModals dialog manager, see gotchas) ·
+                   seed-loader.js · save-template.js · html-import.js ·
+                   command-palette.js · wizard.css · template-wizard.js ·
                    autosave.js · tailwind-input.css (source) ·
                    tailwind.css (compiled, gitignored, `pnpm run build:css`)
 static/shared/     tokens.css (shared cross-page design tokens) ·
@@ -166,6 +174,15 @@ docker compose up --build
 `run-local.sh` uses port 8000 by default and detects an occupied port before
 installing/building anything. Use `PORT=8001 ./run-local.sh` when another
 development server already owns 8000.
+`run-local.sh`/`setup.sh` both run `CI=true pnpm install --frozen-lockfile`
+— without `CI=true` this hangs/aborts
+(`ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY`) whenever the script runs with
+no TTY (an agent, a cron job) and pnpm wants to confirm recreating
+`node_modules`. Real GitHub Actions runners already set `CI=true`
+themselves, so this was invisible in CI — only found by actually running
+`run-local.sh` live outside an interactive terminal. **Verified** 2026-07-26
+via a real end-to-end run (server responded, migrations applied) after the
+fix; `BACKLOG.csv` row 84.
 `setup.sh` is the interactive prerequisite bootstrap: it asks before installing
 missing uv/Python, Node/pnpm, or Docker requirements, stops when a required
 installation is refused, prepares dependencies/Tailwind/PostgreSQL, and
@@ -474,12 +491,43 @@ use the version-matched official Playwright container described in `AGENTS.md`.
   the old semantic-class regression is closed in `BACKLOG.csv` rows 43 and
   55. Keep new preset classes in the allowlist and add a browser regression for
   any new preset.
+- **`EditorModals` (in `editor-ai.js`) discovers modals by querying
+  `.panel-modal[role="dialog"]` once at load — a template-defined modal
+  needs no manual registration, but a modal built dynamically in JS after
+  that query already ran (e.g. `command-palette.js`'s overlay) must call
+  `EditorModals.register(el)` once after building it.** A hand-maintained
+  5-id array previously backed this and `#htmlImportModal` was never added
+  to it — clicking "Pegar HTML" silently did nothing, undetected by any
+  test (`BACKLOG.csv` row 81). All 6 shared dialogs
+  (`elementModal`/`sectionModal`/`paymentLinkModal`/`imagePickerModal`/
+  `saveTemplateModal`/`htmlImportModal`) plus the command palette now have
+  e2e coverage that they open — see `tests/e2e/editor_ux.spec.js` and
+  `tests/e2e/command_palette.spec.js`.
+- **`AuditEvent.record()`** (not `AuditEvent.objects.create()`) is the only
+  way to write an audit row — it creates the event then prunes that
+  owner's events to `AuditEvent.RETENTION_LIMIT` (100), so the table never
+  grows unbounded and never needs a separate purge command. Action set:
+  `ai_transform`, `ai_wizard_generate`, `template_create`, `template_save`
+  — no `palette_apply` (purely client-side, no server round-trip to hook
+  into) and no separate `revision_restore` (restoring already goes through
+  the same PATCH `template_save` covers).
+- **HTML paste import (`apps/ai_assistant/html_import.py`) drops the raw
+  `class` attribute always, but maps a small allowlisted set of `style`
+  declarations to their exact Tailwind class** (`STYLE_TO_TAILWIND`:
+  `text-align`/`font-weight`/`font-style`/`text-decoration`), each
+  re-validated through `is_allowed_tailwind_class`. This is deliberately
+  NOT a general CSS-to-Tailwind converter — only exact `(property, value)`
+  matches; resist growing it into one. Everything else in `style` is
+  dropped and counted in the response's `skipped_attributes`.
 
 ## Related durable context
 
 - `CHANGELOG.md` — what shipped, by version.
-- `BACKLOG.csv` — pending work and known limitations, structured for
-  filtering (status/area/category/verification/blocked_by).
+- `BACKLOG.csv` — the delivery log: every shipped item (status is always
+  `done` in practice — this isn't a forward-looking task tracker),
+  structured for filtering (status/area/category/verification/blocked_by).
+- `learnings.jsonl` — proven technical findings, one per real discovery;
+  never store secrets.
 - `openspec/specs/` — current capability specs (source of truth for behavior).
 - `openspec/specs/editor/palettes.md` — active palette contract, catalog, AI
   constraints, legacy behavior, and verification evidence.
@@ -488,4 +536,10 @@ use the version-matched official Playwright container described in `AGENTS.md`.
 - `TODO.md` — concise status index only; completed implementation checklists
   belong in the capability spec and delivery records.
 - `openspec/changes/` — in-flight change proposals (delta specs).
+- `PROPOSAL.md` — analysis of ideas borrowed from an external project
+  (`corebunch/instatic`), each tied to a maqueta area, with a final
+  done/deferred status per item. `PLAN.md`/`REVIEW.md` are the historical
+  execution-order and self-review record for that effort (`BACKLOG.csv`
+  rows 71–83) — read them for the "why," not as active planning documents;
+  the loop they document converged with nothing further pending.
 - Session memory: `~/.claude/projects/-home-sebitcode-projects-maqueta/memory/`.
