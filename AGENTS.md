@@ -188,9 +188,8 @@ After solving a problem:
 - **Payment gateway credentials are per-seller, not global.** Configured at
   `/config/` (`PaymentGatewayConfig`, encrypted at rest via
   `apps/storefront/crypto.py`) — never add a project-wide `PAYMENT_PROVIDER`
-  setting back; that pattern was deliberately replaced this session because
-  this is a multi-tenant editor (each seller has their own gateway
-  accounts, same as `/productos/` is already owner-scoped).
+  setting; this is a multi-tenant editor and each seller has their own
+  gateway accounts, same as `/productos/` is already owner-scoped.
 - **Anonymous analytics is opt-in and pseudonymous.** Public `/t/<slug>/`
   pages track only after consent, using a separate HttpOnly visitor cookie and
   bounded page/click/mouse events. Never add auth identifiers, IP addresses,
@@ -220,8 +219,9 @@ stream, not a single JSON blob, when parsing it.
 - `CHANGELOG.md` — what shipped.
 - `UXUI.md` — dated frontend audit, browser evidence, completed UX/accessibility
   acceptance matrix, and continuous-improvement criteria for future UI work.
-- `BACKLOG.csv` — known limitations and pending work, structured for
-  filtering (status/area/category/verification/blocked_by).
+- `BACKLOG.csv` — the delivery log: every shipped item (status is always
+  `done` in practice), structured for filtering
+  (status/area/category/verification/blocked_by).
 - `learnings.jsonl` — verified technical learnings from past debugging, one
   JSON object per line — check before starting, append after solving (see
   "Using learnings.jsonl" above).

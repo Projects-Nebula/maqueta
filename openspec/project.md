@@ -536,10 +536,16 @@ use the version-matched official Playwright container described in `AGENTS.md`.
 - `TODO.md` — concise status index only; completed implementation checklists
   belong in the capability spec and delivery records.
 - `openspec/changes/` — in-flight change proposals (delta specs).
-- `PROPOSAL.md` — analysis of ideas borrowed from an external project
-  (`corebunch/instatic`), each tied to a maqueta area, with a final
-  done/deferred status per item. `PLAN.md`/`REVIEW.md` are the historical
-  execution-order and self-review record for that effort (`BACKLOG.csv`
-  rows 71–83) — read them for the "why," not as active planning documents;
-  the loop they document converged with nothing further pending.
+- `PROPOSAL.md`/`IMPLEMENT.md`/`REVIEW.md` (and `FYI.md`, only when a
+  question is genuinely blocking) — live scratch files, one per phase, for
+  the project-agnostic `delivery-loop` skill (global, reusable across
+  projects, self-contained — see `~/.claude/skills/delivery-loop/SKILL.md`
+  for the full methodology, not duplicated here): hold real content only
+  while that phase is in progress, cleared back to empty once resolved and
+  folded into the durable record (kept as files, per explicit instruction,
+  not deleted). `PLAN.md` is the exception — it keeps a durable
+  execution-order index (item → commit/outcome) rather than being cleared.
+  `BACKLOG.csv` and `learnings.jsonl` are this project's own durable
+  records the skill's BACKLOG/LEARNINGS phases already write into directly
+  — not scratch files, never cleared.
 - Session memory: `~/.claude/projects/-home-sebitcode-projects-maqueta/memory/`.

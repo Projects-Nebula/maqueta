@@ -202,8 +202,8 @@ Before shipping any new page, form, modal, or storefront operation:
 ## 9. Addendum — 2026-07-25
 
 Three new interactive surfaces shipped after the 2026-07-24 pass, plus one
-fix to the shared dialog manager itself (`BACKLOG.csv` rows 71–83,
-`PROPOSAL.md`/`PLAN.md`/`REVIEW.md`):
+fix to the shared dialog manager itself (`BACKLOG.csv` rows 71–84, commit
+history `34ba82d`..`decb316`):
 
 - **`#htmlImportModal`** ("Pegar HTML") — added, then found (via this
   file's own rule 4, "verify close/backdrop/Escape/Tab/focus in a real
