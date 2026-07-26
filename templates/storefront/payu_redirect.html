@@ -30,10 +30,6 @@
     </form>
     <noscript>JavaScript está desactivado. Usá el botón para continuar.</noscript>
   </main>
-  <script>
-    window.setTimeout(function () {
-      document.getElementById("payuForm").submit();
-    }, 250);
-  </script>
+  <script src="{% static 'storefront/payu-redirect.js' %}"></script>
 </body>
 </html>
