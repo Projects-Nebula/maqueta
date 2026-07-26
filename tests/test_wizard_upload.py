@@ -40,6 +40,13 @@ def test_valid_upload_is_resized_and_reencoded(api):
     assert body["url"].endswith(".jpg")  # always re-encoded to JPEG
 
 
+def test_upload_response_includes_placeholder_color(api):
+    upload = SimpleUploadedFile("x.png", _png_bytes(color="red"), content_type="image/png")
+    response = api.post(URL, {"file": upload}, format="multipart")
+    assert response.status_code == 201
+    assert response.json()["placeholder_color"] == "#ff0000"
+
+
 def test_oversized_dimensions_are_downscaled(api):
     upload = SimpleUploadedFile("x.png", _png_bytes(3000, 1000), content_type="image/png")
     response = api.post(URL, {"file": upload}, format="multipart")

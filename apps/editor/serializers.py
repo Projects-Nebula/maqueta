@@ -96,5 +96,5 @@ class UploadedAssetSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = UploadedAsset
-        fields = ["id", "url", "width", "height", "created_at"]
+        fields = ["id", "url", "width", "height", "placeholder_color", "created_at"]
         read_only_fields = fields

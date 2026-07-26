@@ -391,7 +391,7 @@ class Command(BaseCommand):
             )
 
     def _create_asset(self, owner, filename: str, label: str, colors: tuple[str, str]):
-        asset = UploadedAsset(owner=owner, width=1200, height=800)
+        asset = UploadedAsset(owner=owner, width=1200, height=800, placeholder_color=colors[0])
         image = Image.new("RGB", (1200, 800), colors[0])
         draw = ImageDraw.Draw(image)
         draw.rectangle((720, 0, 1200, 800), fill=colors[1])

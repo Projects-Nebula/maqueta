@@ -182,6 +182,9 @@ class UploadedAsset(models.Model):
     file = models.ImageField(upload_to="wizard-uploads/%Y/%m/")
     width = models.PositiveIntegerField()
     height = models.PositiveIntegerField()
+    # One-pixel average color, e.g. "#a1b2c3" — a cheap loading placeholder
+    # for the asset pickers (see image_processing._dominant_color_hex).
+    placeholder_color = models.CharField(max_length=7, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

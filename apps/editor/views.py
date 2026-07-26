@@ -284,11 +284,13 @@ class WizardImageUploadView(APIView):
             return Response({"error": "too_many_assets"}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            encoded, _content_type, width, height = process_upload(upload.read())
+            encoded, _content_type, width, height, placeholder_color = process_upload(upload.read())
         except ImageProcessingError as exc:
             return Response({"error": "invalid_image", "detail": str(exc)}, status=400)
 
-        asset = UploadedAsset(owner=request.user, width=width, height=height)
+        asset = UploadedAsset(
+            owner=request.user, width=width, height=height, placeholder_color=placeholder_color
+        )
         asset.file.save("upload.jpg", ContentFile(encoded), save=True)
         return Response(
             UploadedAssetSerializer(asset).data,

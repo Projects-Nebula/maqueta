@@ -223,6 +223,10 @@
       const item = document.createElement("div");
       item.className = "wizard-image-item";
       const img = document.createElement("img");
+      if (asset.placeholder_color) img.style.backgroundColor = asset.placeholder_color;
+      img.addEventListener("load", () => {
+        img.style.backgroundColor = "";
+      });
       img.src = asset.url;
       img.alt = "Imagen cargada " + (index + 1);
       item.appendChild(img);

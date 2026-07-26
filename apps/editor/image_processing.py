@@ -20,11 +20,23 @@ class ImageProcessingError(ValueError):
     """Raised when an upload isn't a usable image."""
 
 
-def process_upload(data: bytes) -> tuple[bytes, str, int, int]:
+def _dominant_color_hex(image: Image.Image) -> str:
+    """A cheap loading placeholder: the image downsampled to one pixel.
+
+    ponytail: a full blurhash decode needs a JS DCT decoder with no build
+    step to vendor it into (static/editor/*.js has none); a one-pixel
+    average color gets the same "don't show a blank box while it loads" UX
+    with a one-line client-side background-color instead.
+    """
+    r, g, b = image.convert("RGB").resize((1, 1), Image.LANCZOS).getpixel((0, 0))
+    return f"#{r:02x}{g:02x}{b:02x}"
+
+
+def process_upload(data: bytes) -> tuple[bytes, str, int, int, str]:
     """Validate, downscale, and re-encode an uploaded image.
 
-    Returns (encoded_bytes, content_type, width, height). Raises
-    ImageProcessingError for anything that isn't a safe, real image.
+    Returns (encoded_bytes, content_type, width, height, placeholder_color).
+    Raises ImageProcessingError for anything that isn't a safe, real image.
     """
     if len(data) > MAX_UPLOAD_BYTES:
         raise ImageProcessingError("image too large")
@@ -46,9 +58,11 @@ def process_upload(data: bytes) -> tuple[bytes, str, int, int]:
     if max(image.width, image.height) > MAX_DIMENSION:
         image.thumbnail((MAX_DIMENSION, MAX_DIMENSION), Image.LANCZOS)
 
+    placeholder_color = _dominant_color_hex(image)
+
     if image.mode not in ("RGB", "L"):
         image = image.convert("RGB")
 
     buffer = io.BytesIO()
     image.save(buffer, format="JPEG", quality=JPEG_QUALITY, optimize=True)
-    return buffer.getvalue(), "image/jpeg", image.width, image.height
+    return buffer.getvalue(), "image/jpeg", image.width, image.height, placeholder_color

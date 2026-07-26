@@ -3674,7 +3674,8 @@ ${body}
               thumb.type = "button";
               thumb.className = "preset";
               thumb.setAttribute("aria-label", "Usar imagen guardada " + (index + 1));
-              thumb.innerHTML = `<img src="${asset.url}" alt="Imagen guardada ${index + 1}" style="width:100%;height:64px;object-fit:cover;border-radius:6px;">`;
+              const bg = asset.placeholder_color || "transparent";
+              thumb.innerHTML = `<img src="${asset.url}" alt="Imagen guardada ${index + 1}" style="width:100%;height:64px;object-fit:cover;border-radius:6px;background-color:${bg};">`;
               thumb.addEventListener("click", () => setImageOnTarget(asset.url));
               imagePickerSavedGrid.appendChild(thumb);
             });
