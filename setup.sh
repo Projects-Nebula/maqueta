@@ -319,7 +319,11 @@ ensure_dependencies() {
   ask_yes_no '¿Querés instalar/sincronizar las dependencias ahora?' \
     || abort 'las dependencias del proyecto son necesarias para continuar'
   uv sync --frozen
-  "${PNPM_CMD[@]}" install --frozen-lockfile
+  # CI=true skips pnpm's interactive TTY prompt to confirm recreating
+  # node_modules when its state doesn't match the lockfile — without it
+  # this hangs/aborts (ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY) whenever
+  # setup.sh runs non-interactively (an agent, a cron job), not just in CI.
+  CI=true "${PNPM_CMD[@]}" install --frozen-lockfile
 }
 
 ensure_postgres() {

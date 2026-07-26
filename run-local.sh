@@ -43,7 +43,13 @@ case "$database_url" in
 esac
 
 uv sync
-pnpm install --frozen-lockfile
+# CI=true skips pnpm's interactive TTY prompt to confirm recreating
+# node_modules when its state doesn't match the lockfile — without it this
+# hangs/aborts (ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY) whenever this
+# script runs non-interactively (an agent, a cron job, anything without a
+# TTY), not just in CI. Real GitHub Actions runners already set CI=true
+# themselves, so this is a no-op there.
+CI=true pnpm install --frozen-lockfile
 pnpm run build:css
 # Para desarrollo activo del CSS: `pnpm exec @tailwindcss/cli -i static/editor/tailwind-input.css -o static/editor/tailwind.css --watch`
 uv run python manage.py migrate
