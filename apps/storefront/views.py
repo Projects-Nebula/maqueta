@@ -3,6 +3,7 @@ import uuid
 
 from django.conf import settings
 from django.contrib.auth.decorators import login_required
+from django.core.mail import send_mail
 from django.http import FileResponse, Http404, HttpResponseRedirect
 from django.shortcuts import render
 from django.urls import reverse
@@ -35,6 +36,27 @@ def _provider_for(owner_id, gateway):
     config = _gateway_config_for(owner_id, gateway)
     credentials = config.get_credentials() if config else None
     return build_payment_provider(gateway, credentials)
+
+
+def _send_order_confirmation(order):
+    """Best-effort receipt email — never let a delivery failure break the
+    checkout flow the buyer is actively waiting on."""
+    if not order.buyer_email:
+        return
+    try:
+        send_mail(
+            subject="Confirmación de tu compra",
+            message=(
+                f"Gracias por tu compra{' de ' + order.product.name if order.product else ''}.\n"
+                f"Monto: {order.amount_cents / 100:.2f} {order.currency.upper()}\n"
+                f"Referencia: {order.gateway_session_id}"
+            ),
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            recipient_list=[order.buyer_email],
+            fail_silently=True,
+        )
+    except Exception:
+        logger.exception("order confirmation email failed for order %s", order.pk)
 
 
 def _record_order_for_session(provider, gateway, session_id, product_id):
@@ -71,6 +93,8 @@ def _record_order_for_session(provider, gateway, session_id, product_id):
     if created and order.status == Order.Status.PAID and product and product.digital_file:
         order.download_token = Order.generate_download_token()
         order.save(update_fields=["download_token"])
+    if created and order.status == Order.Status.PAID:
+        _send_order_confirmation(order)
 
 
 class ProductViewSet(viewsets.ModelViewSet):

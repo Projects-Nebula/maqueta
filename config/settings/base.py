@@ -30,6 +30,17 @@ env = environ.Env(
     DEFAULT_CURRENCY=(str, "usd"),
     ANALYTICS_RETENTION_DAYS=(int, 90),
     ANALYTICS_COOKIE_MAX_AGE=(int, 60 * 60 * 24 * 365),
+    # Console backend prints to stdout — safe, no external dependency,
+    # works offline. Same swappable-provider shape as AI_PROVIDER: set
+    # EMAIL_BACKEND to "django.core.mail.backends.smtp.EmailBackend" (with
+    # EMAIL_HOST/PORT/USE_TLS/HOST_USER/HOST_PASSWORD) for a real deploy.
+    EMAIL_BACKEND=(str, "django.core.mail.backends.console.EmailBackend"),
+    DEFAULT_FROM_EMAIL=(str, "noreply@example.com"),
+    EMAIL_HOST=(str, ""),
+    EMAIL_PORT=(int, 587),
+    EMAIL_USE_TLS=(bool, True),
+    EMAIL_HOST_USER=(str, ""),
+    EMAIL_HOST_PASSWORD=(str, ""),
 )
 
 # Read .env when present (development). In production, real env vars win.
@@ -173,6 +184,14 @@ AI_PROVIDER = env("AI_PROVIDER", default="openai" if OPENAI_API_KEY else "fake")
 # encrypted at rest — see apps/storefront/crypto.py) rather than env vars: this
 # is a multi-tenant editor where each seller has their own Stripe/Mercado
 # Pago/etc account, not one global gateway for the whole deployment. Only
+EMAIL_BACKEND = env("EMAIL_BACKEND")
+DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL")
+EMAIL_HOST = env("EMAIL_HOST")
+EMAIL_PORT = env("EMAIL_PORT")
+EMAIL_USE_TLS = env("EMAIL_USE_TLS")
+EMAIL_HOST_USER = env("EMAIL_HOST_USER")
+EMAIL_HOST_PASSWORD = env("EMAIL_HOST_PASSWORD")
+
 # DEFAULT_CURRENCY stays a deployment-wide setting (not a secret, not
 # per-gateway).
 DEFAULT_CURRENCY = env("DEFAULT_CURRENCY")

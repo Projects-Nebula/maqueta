@@ -1,4 +1,5 @@
 import pytest
+from django.core import mail
 from rest_framework.test import APIClient
 
 from apps.storefront.models import Order, PaymentGatewayConfig, Product
@@ -103,6 +104,9 @@ def test_checkout_with_fake_provider_creates_order_immediately(anon_api, user):
     order = Order.objects.get(gateway="stripe", gateway_session_id=session_id)
     assert order.status == Order.Status.PAID
     assert order.product_id == product.id
+    # A confirmation email went out to the buyer address the fake gateway reported.
+    assert len(mail.outbox) == 1
+    assert mail.outbox[0].to == [order.buyer_email]
 
 
 def test_checkout_ignores_client_supplied_price(anon_api, user):
