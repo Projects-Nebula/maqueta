@@ -31,6 +31,15 @@ this project adheres to [Semantic Versioning](https://semver.org/).
   (Hero, Beneficios, Texto, Imagen, Llamado, Footer). Registered with the
   shared `EditorModals` dialog manager, so it gets Tab-trapping and
   focus-restore-to-trigger like every other editor dialog.
+- **Per-IP login rate limiting.** `/login/` now blocks after 5 failed
+  attempts per IP within 5 minutes (429), resetting on success — the one
+  public-facing endpoint that wasn't already throttled like every AI/
+  checkout/upload endpoint in this project.
+- **Order confirmation email.** A buyer completing checkout now gets a
+  receipt email (`EMAIL_BACKEND` configurable, console by default —
+  same swappable-provider pattern as `AI_PROVIDER`), sent from the same
+  choke point that creates the `Order` row for both real-webhook and
+  fake-provider paths. A delivery failure never blocks the checkout flow.
 
 ### Fixed
 
