@@ -11,16 +11,19 @@ import logging
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.http import HttpResponseBadRequest, HttpResponseRedirect
-from django.shortcuts import render
+from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
 from django.views.decorators.http import require_http_methods
+from rest_framework import viewsets
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from .client import HotmartClientError, build_hotmart_client
-from .models import HotmartConnection
+from .models import HotmartConnection, HotmartProductLink
 from .oauth import build_authorize_url, consume_state, issue_state
+from .serializers import HotmartProductLinkSerializer
+from .services import HotmartReconnectRequired, ensure_fresh_token, reconcile_products
 
 logger = logging.getLogger(__name__)
 
@@ -92,3 +95,73 @@ class DisconnectView(APIView):
     def post(self, request):
         HotmartConnection.objects.filter(owner=request.user).delete()
         return Response(status=204)
+
+
+class ProductListView(APIView):
+    """GET /api/hotmart/products/ — live catalog proxy (spec: "Server-Side
+    Product Listing"). Never returns a token; also drives the opportunistic
+    reconciliation sync on every authenticated fetch (design: "sync =
+    shared reconcile function, two triggers")."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        connection = HotmartConnection.objects.filter(owner=request.user).first()
+        if connection is None:
+            return Response({"connected": False, "products": []})
+
+        client = build_hotmart_client()
+        try:
+            access_token = ensure_fresh_token(connection, client)
+        except HotmartReconnectRequired:
+            return Response({"connected": True, "error": "reconnect_required"}, status=409)
+
+        try:
+            products = client.list_products(access_token)
+        except HotmartClientError:
+            logger.exception("hotmart product list request failed")
+            reconcile_products(connection, None)
+            return Response({"connected": True, "products": [], "error": "upstream_unavailable"})
+
+        reconcile_products(connection, products)
+        linked_ids = set(connection.product_links.values_list("hotmart_product_id", flat=True))
+        return Response(
+            {
+                "connected": True,
+                "products": [
+                    {
+                        "id": product.id,
+                        "name": product.name,
+                        "is_active": product.is_active,
+                        "checkout_url": product.checkout_url,
+                        "linked": product.id in linked_ids,
+                    }
+                    for product in products
+                ],
+            }
+        )
+
+
+class ProductLinkViewSet(viewsets.ModelViewSet):
+    """Owner-scoped CRUD for /api/hotmart/links/ (spec: "One-to-One
+    Product-Landing Link"). Unlinking is metadata-only — DELETE never
+    calls unpublish() on the landing (design: "Metadata-Only Linking")."""
+
+    serializer_class = HotmartProductLinkSerializer
+    permission_classes = [IsAuthenticated]
+    http_method_names = ["get", "post", "delete"]
+
+    def get_queryset(self):
+        return HotmartProductLink.objects.filter(connection__owner=self.request.user)
+
+    def _connection(self):
+        return get_object_or_404(HotmartConnection, owner=self.request.user)
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        if self.action in ("create", "update", "partial_update"):
+            context["connection"] = self._connection()
+        return context
+
+    def perform_create(self, serializer):
+        serializer.save(connection=self._connection())
