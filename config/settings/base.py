@@ -41,6 +41,11 @@ env = environ.Env(
     EMAIL_USE_TLS=(bool, True),
     EMAIL_HOST_USER=(str, ""),
     EMAIL_HOST_PASSWORD=(str, ""),
+    HOTMART_CLIENT_ID=(str, ""),
+    HOTMART_CLIENT_SECRET=(str, ""),
+    HOTMART_AUTH_BASE_URL=(str, "https://api-sec-vlc.hotmart.com/security/oauth"),
+    HOTMART_API_BASE_URL=(str, "https://developers.hotmart.com/payments/api/v1"),
+    HOTMART_REQUEST_TIMEOUT=(int, 10),
 )
 
 # Read .env when present (development). In production, real env vars win.
@@ -67,6 +72,7 @@ INSTALLED_APPS = [
     "apps.projects",
     "apps.storefront",
     "apps.analytics",
+    "apps.hotmart",
 ]
 
 MIDDLEWARE = [
@@ -200,6 +206,17 @@ DEFAULT_CURRENCY = env("DEFAULT_CURRENCY")
 # visitor cookie is pseudonymous and intentionally separate from auth.session.
 ANALYTICS_RETENTION_DAYS = env("ANALYTICS_RETENTION_DAYS")
 ANALYTICS_COOKIE_MAX_AGE = env("ANALYTICS_COOKIE_MAX_AGE")
+
+# --- Hotmart integration ----------------------------------------------------
+# Platform-level OAuth app credentials (same handling as OPENAI_API_KEY —
+# one maqueta-owned Hotmart developer app; per-seller tokens live encrypted
+# on HotmartConnection, see apps/hotmart/models.py). Without both client id
+# and secret, build_hotmart_client() always returns the fake client.
+HOTMART_CLIENT_ID = env("HOTMART_CLIENT_ID")
+HOTMART_CLIENT_SECRET = env("HOTMART_CLIENT_SECRET")
+HOTMART_AUTH_BASE_URL = env("HOTMART_AUTH_BASE_URL")
+HOTMART_API_BASE_URL = env("HOTMART_API_BASE_URL")
+HOTMART_REQUEST_TIMEOUT = env("HOTMART_REQUEST_TIMEOUT")
 
 # --- Security headers ------------------------------------------------------
 DATA_UPLOAD_MAX_MEMORY_SIZE = 1024 * 1024  # 1 MB request body cap

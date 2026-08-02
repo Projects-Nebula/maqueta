@@ -21,6 +21,7 @@ dependencies = [
     "braintree>=4.45.0",
     "paypal-server-sdk>=2.3.0",
     "cryptography>=49.0.0",
+    "httpx>=0.28.1",
 ]
 
 [dependency-groups]
