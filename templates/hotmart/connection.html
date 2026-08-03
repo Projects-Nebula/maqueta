@@ -50,6 +50,38 @@
       font: inherit; background: var(--app-bg); color: var(--text);
     }
     .credentials-form .btn { width: 100%; }
+    .products-section { margin-top: 32px; }
+    .products-section h2 { font-size: 16px; margin: 0 0 12px; }
+    .product-card {
+      background: var(--panel-bg); border: 1px solid var(--border); border-radius: 12px;
+      padding: 16px; margin-bottom: 12px; display: flex; align-items: center;
+      justify-content: space-between; gap: 12px; flex-wrap: wrap;
+    }
+    .product-card .product-name { font-weight: 700; }
+    .product-card .product-status { font-size: 12px; color: var(--muted); display: block; margin-top: 2px; }
+    .product-card .product-status.inactive { color: #d33; }
+    .btn.secondary { background: transparent; border: 1px solid var(--border); color: var(--text); }
+    .btn.small { padding: 7px 12px; font-size: 13px; }
+    .landing-modal-backdrop {
+      position: fixed; inset: 0; background: rgba(0,0,0,.5); display: flex;
+      align-items: center; justify-content: center; padding: 20px; z-index: 100;
+    }
+    .landing-modal-backdrop.hidden { display: none; }
+    .landing-modal {
+      background: var(--panel-bg); border-radius: 14px; padding: 24px; max-width: 480px;
+      width: 100%; max-height: 90vh; overflow-y: auto;
+    }
+    .landing-modal h3 { margin: 0 0 4px; }
+    .landing-modal p.hint { margin: 0 0 16px; color: var(--muted); font-size: 13px; }
+    .landing-modal .field { display: block; margin-bottom: 14px; font-size: 14px; font-weight: 600; }
+    .landing-modal .field span { display: block; margin-bottom: 6px; }
+    .landing-modal .control {
+      width: 100%; padding: 9px 10px; border: 1px solid var(--border); border-radius: 8px;
+      font: inherit; background: var(--app-bg); color: var(--text); resize: vertical;
+    }
+    .landing-modal .actions { display: flex; gap: 10px; margin-top: 8px; }
+    .landing-modal .actions .btn { flex: 1; }
+    .landing-progress { font-size: 13px; color: var(--muted); margin: 8px 0 0; min-height: 18px; }
   </style>
 </head>
 <body>
@@ -112,9 +144,47 @@
         <li>Con la cuenta conectada vas a poder ver tus productos de Hotmart y vincular cada uno a una landing para editarla y publicarla.</li>
       </ol>
     </div>
+
+    {% if connected %}
+    <div class="products-section">
+      <h2>Tus productos</h2>
+      <div id="productList"></div>
+    </div>
+    {% endif %}
   </main>
 
+  <div id="landingModalBackdrop" class="landing-modal-backdrop hidden">
+    <div class="landing-modal">
+      <h3>Generar landing</h3>
+      <p class="hint">Contanos lo que Hotmart no sabe: a quién le hablás, qué les prometés y qué incluye tu oferta.</p>
+      <form id="landingGenerateForm">
+        <label class="field">
+          <span>¿A quién le hablás? *</span>
+          <textarea id="landingAudience" class="control" rows="2" required maxlength="500"></textarea>
+        </label>
+        <label class="field">
+          <span>¿Qué les prometés? *</span>
+          <textarea id="landingPromise" class="control" rows="2" required maxlength="500"></textarea>
+        </label>
+        <label class="field">
+          <span>¿Qué incluye la oferta? (opcional)</span>
+          <textarea id="landingOfferDetails" class="control" rows="2" maxlength="1000"></textarea>
+        </label>
+        <label class="field">
+          <span>Link de pago de Hotmart (opcional)</span>
+          <input id="landingCheckoutUrl" class="control" type="url" placeholder="https://pay.hotmart.com/...">
+        </label>
+        <p class="landing-progress" id="landingProgress" aria-live="polite"></p>
+        <div class="actions">
+          <button type="button" id="landingCancelBtn" class="btn secondary">Cancelar</button>
+          <button type="submit" id="landingSubmitBtn" class="btn primary">Generar landing</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <script src="{% static 'shared/feedback.js' %}"></script>
+  <script src="{% static 'shared/ai-stream.js' %}"></script>
   <script src="{% static 'hotmart/connection.js' %}"></script>
 </body>
 </html>

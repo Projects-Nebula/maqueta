@@ -154,6 +154,7 @@ REST_FRAMEWORK = {
         "ai_wizard_questions": "10/m",
         "ai_wizard_review": "15/m",
         "ai_wizard_generate": "6/m",
+        "hotmart_landing_generate": "6/m",
         "html_import": "20/m",
         "wizard_upload": "20/m",
         "public_template_view": "60/m",
