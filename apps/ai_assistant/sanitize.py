@@ -141,11 +141,46 @@ CSS_PROPERTY_ALLOWLIST = {
     "clear",
 }
 
-# CSS values must not smuggle in code or external fetches.
+# CSS values must not smuggle in code or external fetches. The url() clause's
+# negative lookahead only allows a single leading "/" (a local, same-origin
+# path) or "data:image/" or "#fragment" — a bare "/" alone would also match
+# the start of "//host/path" (a protocol-relative, effectively external URL),
+# so the "/" alternative explicitly requires it NOT be followed by a second
+# "/".
 CSS_VALUE_FORBIDDEN = re.compile(
-    r"(expression\s*\(|javascript:|@import|url\s*\(\s*[\"']?\s*(?!#|/|data:image/)|[<>{}])",
+    r"(expression\s*\(|javascript:|@import|url\s*\(\s*[\"']?\s*(?!#|/(?!/)|data:image/)|[<>{}])",
     re.IGNORECASE,
 )
+
+# CSS escape sequences (hex code points like `\6a ` or a backslash-escaped
+# literal character) can spell out forbidden tokens like "javascript:"
+# without the literal substring ever appearing — decode them before running
+# check_style_attribute_value's safety checks.
+CSS_ESCAPE_RE = re.compile(r"\\([0-9a-fA-F]{1,6})\s?|\\(.)")
+
+
+def _css_unescape(value: str) -> str:
+    def _replace(match: re.Match) -> str:
+        hex_code = match.group(1)
+        if hex_code:
+            try:
+                return chr(int(hex_code, 16))
+            except ValueError:
+                return ""
+        return match.group(2) or ""
+
+    return CSS_ESCAPE_RE.sub(_replace, value)
+
+
+_URL_TARGET_RE = re.compile(r"url\s*\(\s*[\"']?([^\"')]*)[\"']?\s*\)", re.IGNORECASE)
+
+
+def _extract_url_target(value: str) -> str | None:
+    match = _URL_TARGET_RE.search(value)
+    if match is None:
+        return None
+    return match.group(1).strip()
+
 
 # Limits on the incoming node subtree.
 MAX_NODE_DEPTH = 40
@@ -202,8 +237,63 @@ def check_css_declaration(prop: str, value: str) -> None:
     name = str(prop).strip().lower()
     if name not in CSS_PROPERTY_ALLOWLIST:
         raise SanitizationError(f"CSS property not allowed: {prop}")
-    if CSS_VALUE_FORBIDDEN.search(str(value)):
+    raw = str(value)
+    # Check both the raw and CSS-escape-decoded forms — a value like
+    # `url(/\/evil.com)` reads as a safe single-slash path until decoded,
+    # where `\/` becomes a literal `/` and the url turns protocol-relative.
+    if CSS_VALUE_FORBIDDEN.search(raw) or CSS_VALUE_FORBIDDEN.search(_css_unescape(raw)):
         raise SanitizationError(f"CSS value not allowed for {prop}")
+
+
+def check_style_attribute_value(value: str, *, asset_url_prefix: str = "/media/") -> str:
+    """Return a re-serialized, allowlisted style value.
+
+    Unlike ``check_css_declaration``, this never raises on an individual
+    unsafe or unknown declaration — it drops it and keeps validating the
+    rest, so one bad declaration doesn't reject an entire inline style
+    (callers are expected to count drops toward their own
+    ``skipped_attributes`` total). The only thing dropped wholesale is a
+    non-string input, which returns "".
+
+    This is stricter than ``check_css_declaration`` about ``url(...)``:
+    every url target must be a same-page fragment (``#...``) or start with
+    ``asset_url_prefix`` (default ``/media/``, the app's own upload
+    storage). This intentionally forbids things ``check_css_declaration``
+    otherwise allows for the AI path, such as ``url(/some/other/path)`` or
+    ``url(data:image/...)`` — the caller is content that's fully
+    self-referential to its own asset set, so nothing else earns trust.
+    """
+    if not isinstance(value, str):
+        return ""
+
+    kept: list[str] = []
+    for chunk in value.split(";"):
+        if ":" not in chunk:
+            continue
+        prop, _, raw_val = chunk.partition(":")
+        prop = prop.strip()
+        raw_val = raw_val.strip()
+        if not prop or not raw_val:
+            continue
+
+        name = prop.lower()
+        if name not in CSS_PROPERTY_ALLOWLIST:
+            continue
+
+        decoded_val = _css_unescape(raw_val)
+        if CSS_VALUE_FORBIDDEN.search(raw_val) or CSS_VALUE_FORBIDDEN.search(decoded_val):
+            continue
+
+        if "url(" in decoded_val.lower():
+            target = _extract_url_target(decoded_val)
+            if target is None or not (
+                target.startswith("#") or target.startswith(asset_url_prefix)
+            ):
+                continue
+
+        kept.append(f"{prop}: {raw_val}")
+
+    return "; ".join(kept)
 
 
 def check_css_variable(name: str, value: str) -> None:
@@ -246,7 +336,12 @@ def check_asset_entry(asset_id: str, entry: dict) -> None:
             raise SanitizationError(f"invalid asset {dim}: {asset_id}")
 
 
-def check_attributes(attributes: dict) -> None:
+def check_attributes(attributes: dict, *, allow_style: bool = False) -> None:
+    """``allow_style`` must stay False for every AI-facing/model-authored
+    call site — an inline style attribute is a CSS injection vector, and
+    the AI content paths have no reason to need one. Only opt in for a
+    caller that pre-validates the style value itself through
+    ``check_style_attribute_value`` (e.g. the site-bundle importer)."""
     # Deferred import: tailwind_classes.py imports SanitizationError from
     # this module, so importing it back at module level here would be
     # circular. By the time this function actually runs, both modules are
@@ -259,7 +354,11 @@ def check_attributes(attributes: dict) -> None:
         check_attribute_name(name)
         lowered = str(name).strip().lower()
         if lowered == "style":
-            raise SanitizationError("inline style attribute not allowed")
+            if not allow_style:
+                raise SanitizationError("inline style attribute not allowed")
+            if not isinstance(value, str) or not check_style_attribute_value(value):
+                raise SanitizationError(f"style attribute rejected: {value!r}")
+            continue
         if lowered in URL_ATTRS:
             check_url_value(value)
         if lowered == "class":
@@ -326,7 +425,7 @@ def sanitize_context_node(node) -> dict:
     return normalized
 
 
-def sanitize_node(node, *, _depth=0, _counter=None) -> None:
+def sanitize_node(node, *, allow_style: bool = False, _depth=0, _counter=None) -> None:
     """Validate a single node tree; raise SanitizationError on any violation."""
     if _counter is None:
         _counter = [0]
@@ -362,10 +461,10 @@ def sanitize_node(node, *, _depth=0, _counter=None) -> None:
         if not src.startswith(IFRAME_SRC_ALLOWED_PREFIXES):
             raise SanitizationError(f"iframe src not allowed: {src}")
 
-    check_attributes(attributes)
+    check_attributes(attributes, allow_style=allow_style)
 
     children = node.get("children", [])
     if children and not isinstance(children, list):
         raise SanitizationError("children must be a list")
     for child in children or []:
-        sanitize_node(child, _depth=_depth + 1, _counter=_counter)
+        sanitize_node(child, allow_style=allow_style, _depth=_depth + 1, _counter=_counter)
