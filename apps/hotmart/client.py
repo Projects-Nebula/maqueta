@@ -114,7 +114,13 @@ class RealHotmartClient(HotmartClient):
                 HotmartProduct(
                     id=str(item["id"]),
                     name=item.get("name", ""),
-                    is_active=bool(item.get("is_active", False)),
+                    # Hotmart's real /products payload has no `is_active`
+                    # boolean — only a `status` string (confirmed live:
+                    # "ACTIVE" for a published product, "DRAFT" /
+                    # "CHANGES_PENDING_ON_PRODUCT" otherwise).
+                    is_active=item.get("status") == "ACTIVE",
+                    # Real payload also has no `checkout_url` — left empty
+                    # until the actual sales-link source is confirmed.
                     checkout_url=item.get("checkout_url", ""),
                 )
                 for item in items

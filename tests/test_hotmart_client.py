@@ -110,3 +110,43 @@ class TestRealHotmartClientFetchToken:
 
         with pytest.raises(HotmartClientError):
             self._client().fetch_token()
+
+
+class TestRealHotmartClientListProducts:
+    def _client(self):
+        return RealHotmartClient(
+            client_id="client-id",
+            client_secret="client-secret",
+            auth_base_url="https://auth.example.com/oauth",
+            api_base_url="https://api.example.com",
+            timeout=5,
+        )
+
+    def test_list_products_maps_active_status_not_missing_is_active_field(self, monkeypatch):
+        """Hotmart's real /products payload has no `is_active` boolean —
+        only a `status` string. Regression test for a bug where
+        `item.get("is_active", False)` silently defaulted every real
+        product to inactive, which made reconcile_products() unpublish
+        every linked landing on every sync run."""
+
+        def _fake_get(url, *, headers, timeout):
+            request = httpx.Request("GET", url)
+            return httpx.Response(
+                200,
+                json={
+                    "items": [
+                        {"id": 1, "name": "Live", "status": "ACTIVE"},
+                        {"id": 2, "name": "Draft", "status": "DRAFT"},
+                    ]
+                },
+                request=request,
+            )
+
+        monkeypatch.setattr("httpx.get", _fake_get)
+
+        products = self._client().list_products("some-access-token")
+
+        assert products[0].id == "1"
+        assert products[0].is_active is True
+        assert products[1].id == "2"
+        assert products[1].is_active is False
