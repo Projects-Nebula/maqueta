@@ -44,6 +44,10 @@ env = environ.Env(
     HOTMART_AUTH_BASE_URL=(str, "https://api-sec-vlc.hotmart.com/security/oauth"),
     HOTMART_API_BASE_URL=(str, "https://developers.hotmart.com/products/api/v1"),
     HOTMART_REQUEST_TIMEOUT=(int, 10),
+    VERCEL_TOKEN=(str, ""),
+    VERCEL_TEAM_ID=(str, ""),
+    VERCEL_API_BASE_URL=(str, "https://api.vercel.com"),
+    VERCEL_REQUEST_TIMEOUT=(int, 30),
 )
 
 # Read .env when present (development). In production, real env vars win.
@@ -71,6 +75,7 @@ INSTALLED_APPS = [
     "apps.storefront",
     "apps.analytics",
     "apps.hotmart",
+    "apps.vercel",
 ]
 
 MIDDLEWARE = [
@@ -216,6 +221,20 @@ ANALYTICS_COOKIE_MAX_AGE = env("ANALYTICS_COOKIE_MAX_AGE")
 HOTMART_AUTH_BASE_URL = env("HOTMART_AUTH_BASE_URL")
 HOTMART_API_BASE_URL = env("HOTMART_API_BASE_URL")
 HOTMART_REQUEST_TIMEOUT = env("HOTMART_REQUEST_TIMEOUT")
+
+# --- Vercel integration ------------------------------------------------------
+# Platform-level credential (NOT per-seller): a single Vercel token owned by
+# maqueta deploys every seller's bundle, each into its own Vercel project for
+# origin isolation (see design.md ADR). VERCEL_TEAM_ID is optional — verified
+# live against the real Vercel API that a personal-account token needs no
+# teamId on any call (deployments, project list/delete, user info); it is
+# only sent when explicitly configured for a team-owned token. Without
+# VERCEL_TOKEN, build_vercel_client() always returns the fake client, so the
+# suite stays green with zero Vercel credentials.
+VERCEL_TOKEN = env("VERCEL_TOKEN")
+VERCEL_TEAM_ID = env("VERCEL_TEAM_ID")
+VERCEL_API_BASE_URL = env("VERCEL_API_BASE_URL")
+VERCEL_REQUEST_TIMEOUT = env("VERCEL_REQUEST_TIMEOUT")
 
 # --- Security headers ------------------------------------------------------
 DATA_UPLOAD_MAX_MEMORY_SIZE = 1024 * 1024  # 1 MB request body cap
