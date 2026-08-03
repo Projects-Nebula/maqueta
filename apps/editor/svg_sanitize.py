@@ -10,6 +10,7 @@ discarded once parsed.
 
 from __future__ import annotations
 
+import re
 from xml.etree.ElementTree import Element, ParseError, register_namespace, tostring
 
 import defusedxml.ElementTree as DefusedET
@@ -50,6 +51,11 @@ MAX_ELEMENT_DEPTH = 40
 # checking, mirroring apps/ai_assistant/sanitize.py's URL_ATTRS.
 URL_ATTRS = {"href", "xlink:href", "src"}
 
+# RFC 3986 scheme syntax ("javascript:", "data:", "https:", ...). Used only
+# in bundle-relative mode (asset_url_prefix="") to tell a same-bundle
+# relative path ("assets/x.png") apart from a URL with an explicit scheme.
+_SCHEME_RE = re.compile(r"^[a-zA-Z][a-zA-Z0-9+.\-]*:")
+
 
 def _local_name(tag: str) -> str:
     """Strip an XML namespace URI from an ElementTree tag (`{ns}tag` -> `tag`)."""
@@ -57,12 +63,36 @@ def _local_name(tag: str) -> str:
 
 
 def _is_safe_url_target(value: str, *, asset_url_prefix: str) -> bool:
-    raw = value.strip()
+    # Browsers strip every ASCII tab/newline/CR from a URL string — not
+    # just leading/trailing — before parsing its scheme (WHATWG URL spec).
+    # "java\tscript:alert(1)" doesn't match _SCHEME_RE literally, but a
+    # browser reconstructs and runs it as "javascript:alert(1)" on
+    # click/activation, so the same stripping must happen before any check
+    # here or that reconstruction bypasses every guard below.
+    raw = re.sub(r"[\t\n\r]", "", value).strip()
     if not raw:
         return True
     if raw.startswith("#"):
         return True
-    return raw.startswith(asset_url_prefix)
+    if raw.startswith("//"):
+        # Protocol-relative — must be rejected before any prefix check,
+        # regardless of asset_url_prefix: "//evil.com".startswith("/") is
+        # True, which is the exact bypass class already fixed once in
+        # apps/ai_assistant/sanitize.py.
+        return False
+    if asset_url_prefix:
+        # Node-conversion mode (e.g. "/media/"): assets live under a fixed,
+        # known-safe prefix.
+        return raw.startswith(asset_url_prefix)
+    # Bundle-relative mode (asset_url_prefix=""): assets are referenced by
+    # plain relative paths like "assets/logo.png", not a fixed prefix.
+    # Accept only a genuine relative path — reject absolute paths and
+    # anything with a URL scheme (http:, https:, javascript:, data:, ...).
+    if raw.startswith("/"):
+        return False
+    if _SCHEME_RE.match(raw):
+        return False
+    return True
 
 
 class SvgSanitizationError(ValueError):

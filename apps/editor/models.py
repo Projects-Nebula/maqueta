@@ -172,6 +172,65 @@ class AuditEvent(models.Model):
         return event
 
 
+class SiteBundle(models.Model):
+    """An owner-scoped upload of a finished static site (HTML + assets),
+    validated once by apps.editor.asset_validation.validate_bundle() and
+    then forked into two flows: deploy-as-is
+    (apps.vercel.services.deploy_bundle, PR3 of this change) or
+    convert-to-editable (site-bundle-import's node converter, PR3/4 of that
+    change — not built here). This model and BundleAsset are path-agnostic
+    on purpose: they carry no opinion about which flow consumes them, so
+    the flows fork after ingestion instead of each maintaining its own
+    upload/validation copy."""
+
+    owner = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="site_bundles"
+    )
+    name = models.CharField(max_length=120)
+    # Stable once set, same pattern as UserTemplate.public_slug — used as
+    # the Vercel project name (mq-{public_slug}). One Vercel project per
+    # SiteBundle is the origin-isolation boundary a malicious script in a
+    # deployed bundle can't cross (see apps/vercel/client.py). Set by the
+    # deploy flow (PR3), not at ingestion time.
+    public_slug = models.SlugField(max_length=140, unique=True, null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return self.name
+
+
+class BundleAsset(models.Model):
+    """One validated file within a SiteBundle. ``path`` is the bundle-
+    relative lookup key (e.g. "assets/logo.png", "index.html") used to
+    resolve references from the HTML — never a filesystem path (see
+    apps.editor.asset_validation's path-hardening doctrine). Exactly one
+    asset per bundle has ``path == "index.html"``, enforced by
+    ``validate_bundle()`` before any BundleAsset is ever created, not by a
+    DB constraint here."""
+
+    bundle = models.ForeignKey(SiteBundle, on_delete=models.CASCADE, related_name="assets")
+    path = models.CharField(max_length=255)
+    file = models.FileField(upload_to="site-bundles/%Y/%m/")
+    content_type = models.CharField(max_length=100)
+    byte_size = models.PositiveIntegerField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["path"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["bundle", "path"], name="editor_bundleasset_bundle_path_unique"
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.bundle_id}:{self.path}"
+
+
 class UploadedAsset(models.Model):
     """An image a user uploaded for the wizard, already resized/re-encoded
     server-side (see apps.editor.image_processing) — never the raw upload."""

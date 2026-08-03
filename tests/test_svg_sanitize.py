@@ -122,6 +122,68 @@ def test_removes_style_element_and_its_css():
     assert b"evil.com" not in cleaned
 
 
+def test_rejects_protocol_relative_href_with_media_prefix():
+    """ "//evil.com".startswith("/media/") is already False, but this locks
+    in the guard regardless of asset_url_prefix — see the bundle-relative
+    case below where a naive prefix check would have admitted it."""
+    data = b"""<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+        <use xlink:href="//evil.com/x.svg#y" />
+    </svg>"""
+    cleaned = sanitize_svg(data, asset_url_prefix="/media/")
+    assert b"evil.com" not in cleaned
+
+
+def test_bundle_relative_asset_href_is_kept():
+    """asset_url_prefix="" is the bundle-relative mode (see
+    apps/editor/asset_validation.py): plain relative paths like
+    "assets/icon.svg" are the seller's own bundle assets and must survive."""
+    data = b"""<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+        <use xlink:href="assets/icon.svg#check" />
+    </svg>"""
+    cleaned = sanitize_svg(data, asset_url_prefix="")
+    assert b"assets/icon.svg#check" in cleaned
+
+
+def test_bundle_relative_mode_rejects_protocol_relative_href():
+    """The naive fix ("//evil.com".startswith("/") is True) would have
+    admitted this — this is the exact bypass class already fixed once in
+    apps/ai_assistant/sanitize.py."""
+    data = b"""<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+        <use xlink:href="//evil.com/x.svg" />
+    </svg>"""
+    cleaned = sanitize_svg(data, asset_url_prefix="")
+    assert b"evil.com" not in cleaned
+
+
+def test_bundle_relative_mode_rejects_absolute_path_href():
+    data = b"""<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+        <use xlink:href="/etc/passwd" />
+    </svg>"""
+    cleaned = sanitize_svg(data, asset_url_prefix="")
+    assert b"/etc/passwd" not in cleaned
+
+
+def test_bundle_relative_mode_rejects_scheme_href():
+    data = b"""<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+        <use xlink:href="javascript:alert(1)" />
+    </svg>"""
+    cleaned = sanitize_svg(data, asset_url_prefix="")
+    assert b"javascript:" not in cleaned
+
+
+def test_bundle_relative_mode_rejects_tab_obfuscated_scheme_href():
+    """Browsers strip ASCII tab/newline/CR anywhere in a URL before parsing
+    its scheme (WHATWG URL spec) — "java\\tscript:" reconstructs to
+    "javascript:" at click time even though it doesn't match the scheme
+    regex literally. Regression for a bypass the scheme guard initially
+    missed because it only checked the raw, non-normalized value."""
+    data = b"""<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+        <use xlink:href="java&#9;script:alert(1)" />
+    </svg>"""
+    cleaned = sanitize_svg(data, asset_url_prefix="")
+    assert b"xlink:href" not in cleaned
+
+
 def test_rejects_deeply_nested_svg_instead_of_crashing():
     """A well-formed, DOCTYPE-free SVG nested beyond MAX_ELEMENT_DEPTH must
     fail closed with SvgSanitizationError, not an uncaught RecursionError
