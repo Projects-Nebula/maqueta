@@ -14,6 +14,8 @@ the injection surface sanitize.py's node-tree checks are designed to close.
 
 from __future__ import annotations
 
+import re
+
 from apps.editor.palettes import (
     PaletteValidationError,
     validate_palette_metadata,
@@ -37,6 +39,11 @@ from .sanitize import (
 MAX_TITLE_LENGTH = 200
 MAX_META_COUNT = 10
 MAX_META_VALUE_LENGTH = 300
+
+# SEO meta tags (Open Graph / Twitter Card) are keyed by `property`, not
+# `name` — restricted to these two prefixes so this stays a narrow allowlist
+# for AI-generated content, not a general-purpose `property` passthrough.
+_META_PROPERTY_PATTERN = re.compile(r"^(og|twitter):[a-z:]+$")
 
 # The AI is told to always emit these exact values (see prompts.py). Anything
 # else is rejected outright — these flags gate whether raw HTML/scripts are
@@ -93,11 +100,19 @@ def _check_head(head):
         _require(isinstance(meta, dict), "each meta must be an object")
         _require("http-equiv" not in meta, "meta http-equiv is not allowed")
         for key, value in meta.items():
-            _require(key in ("charset", "name", "content"), f"meta key not allowed: {key}")
+            _require(
+                key in ("charset", "name", "content", "property"),
+                f"meta key not allowed: {key}",
+            )
             _require(
                 isinstance(value, str) and len(value) <= MAX_META_VALUE_LENGTH,
                 f"invalid meta value for {key}",
             )
+            if key == "property":
+                _require(
+                    bool(_META_PROPERTY_PATTERN.match(value)),
+                    f"meta property not allowed: {value}",
+                )
 
     # No legitimate use case for AI-authored <link>/<script> tags — both are
     # unnecessary attack surface (third-party fetch, arbitrary code) with zero

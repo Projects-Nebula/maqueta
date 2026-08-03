@@ -69,6 +69,42 @@ def test_links_must_be_empty():
         sanitize_document(doc)
 
 
+def test_og_meta_property_accepted():
+    doc = copy.deepcopy(VALID_DOCUMENT)
+    doc["document"]["head"]["metas"].append({"property": "og:title", "content": "Mi negocio"})
+    sanitize_document(doc)
+
+
+def test_twitter_meta_property_accepted():
+    doc = copy.deepcopy(VALID_DOCUMENT)
+    doc["document"]["head"]["metas"].append(
+        {"property": "twitter:description", "content": "Compra ya"}
+    )
+    sanitize_document(doc)
+
+
+def test_unknown_meta_property_prefix_rejected():
+    doc = copy.deepcopy(VALID_DOCUMENT)
+    doc["document"]["head"]["metas"].append({"property": "evil:x", "content": "..."})
+    with pytest.raises(DocumentValidationError):
+        sanitize_document(doc)
+
+
+def test_meta_name_description_still_accepted():
+    doc = copy.deepcopy(VALID_DOCUMENT)
+    doc["document"]["head"]["metas"].append({"name": "description", "content": "Mi negocio"})
+    sanitize_document(doc)
+
+
+def test_meta_http_equiv_still_rejected_alongside_property():
+    doc = copy.deepcopy(VALID_DOCUMENT)
+    doc["document"]["head"]["metas"].append(
+        {"http-equiv": "refresh", "property": "og:title", "content": "0"}
+    )
+    with pytest.raises(DocumentValidationError):
+        sanitize_document(doc)
+
+
 def test_allow_raw_html_rejected():
     doc = copy.deepcopy(VALID_DOCUMENT)
     doc["settings"]["allowRawHtml"] = True

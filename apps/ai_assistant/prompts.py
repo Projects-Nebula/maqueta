@@ -245,7 +245,11 @@ Responde EXCLUSIVAMENTE con un objeto JSON con esta forma EXACTA:
     "doctype": "html",
     "htmlAttributes": {"lang":"es","dir":"ltr"},
     "head": {"title":"...","metas":[{"charset":"UTF-8"},
-      {"name":"viewport","content":"width=device-width, initial-scale=1"}],
+      {"name":"viewport","content":"width=device-width, initial-scale=1"},
+      {"name":"description","content":"..."},
+      {"property":"og:title","content":"..."},
+      {"property":"og:description","content":"..."},
+      {"property":"og:type","content":"website"}],
       "links":[], "scripts":[]},
     "body": {"attributes":{"class":["flex","flex-col"]}, "children":[ <nodos> ]}
   },
@@ -261,6 +265,15 @@ Reglas estrictas:
 - "settings" va SIEMPRE con esos 6 valores EXACTOS, nunca los cambies
   (en particular "allowRawHtml" y "allowInlineScripts" siempre false).
 - "document.head.links" y "document.head.scripts" van SIEMPRE vacíos ([]).
+- "document.head.metas" SIEMPRE incluye, además de "charset" y "viewport": un
+  meta `{"name":"description","content":"..."}` con un resumen breve y
+  atractivo de la página (para SEO), y metas Open Graph
+  `{"property":"og:title","content":"..."}`,
+  `{"property":"og:description","content":"..."}` y
+  `{"property":"og:type","content":"website"}` — opcionalmente también
+  `twitter:title`/`twitter:description` con el mismo contenido. Nunca
+  inventes datos concretos (precios, testimonios, contacto) en estos
+  textos — describí la página en base a lo que el usuario dio.
 - "components" y "assets" van SIEMPRE vacíos ({}) en TU respuesta — el
   servidor completa "assets" después con las imágenes que el usuario ya
   subió (ver "imágenes disponibles" en el contexto, si las hay).

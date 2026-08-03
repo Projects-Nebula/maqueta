@@ -114,7 +114,13 @@ class TestReconcileProducts:
         connection = _connected(user)
         link = _linked(connection, product_id="prod-paused")
         products = [
-            HotmartProduct(id="prod-paused", name="Paused", is_active=False, checkout_url="")
+            HotmartProduct(
+                id="prod-paused",
+                ucode="ucode-paused",
+                name="Paused",
+                is_active=False,
+                checkout_url="",
+            )
         ]
 
         reconcile_products(connection, products)
@@ -128,7 +134,13 @@ class TestReconcileProducts:
         connection = _connected(user)
         link = _linked(connection, product_id="prod-active")
         products = [
-            HotmartProduct(id="prod-active", name="Active", is_active=True, checkout_url="")
+            HotmartProduct(
+                id="prod-active",
+                ucode="ucode-active",
+                name="Active",
+                is_active=True,
+                checkout_url="",
+            )
         ]
 
         reconcile_products(connection, products)

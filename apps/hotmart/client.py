@@ -34,9 +34,18 @@ class TokenBundle:
 @dataclass(frozen=True)
 class HotmartProduct:
     id: str
+    ucode: str
     name: str
     is_active: bool
     checkout_url: str
+
+
+@dataclass(frozen=True)
+class HotmartOffer:
+    id: str
+    price: str
+    currency: str
+    description: str
 
 
 class HotmartClient(ABC):
@@ -45,6 +54,9 @@ class HotmartClient(ABC):
 
     @abstractmethod
     def list_products(self, access_token: str) -> list[HotmartProduct]: ...
+
+    @abstractmethod
+    def list_offers(self, access_token: str, ucode: str) -> list[HotmartOffer]: ...
 
 
 class RealHotmartClient(HotmartClient):
@@ -113,6 +125,7 @@ class RealHotmartClient(HotmartClient):
             return [
                 HotmartProduct(
                     id=str(item["id"]),
+                    ucode=item.get("ucode", ""),
                     name=item.get("name", ""),
                     # Hotmart's real /products payload has no `is_active`
                     # boolean — only a `status` string (confirmed live:
@@ -129,6 +142,41 @@ class RealHotmartClient(HotmartClient):
             raise HotmartClientError(f"hotmart product list request failed: {exc}") from exc
         except (KeyError, ValueError, TypeError) as exc:
             raise HotmartClientError("hotmart product response had an unexpected shape") from exc
+
+    def list_offers(self, access_token: str, ucode: str) -> list[HotmartOffer]:
+        """GET {api_base_url}/products/{ucode}/offers. v1 takes the first
+        offer as "main" wherever a product has several (documented open
+        question — no `default`/priority flag was live-observed).
+
+        The real /offers payload's field names beyond `id` are UNCONFIRMED
+        against a live response — `price`/`currency`/`description` are read
+        with tolerant `.get()` defaults rather than required keys, so an
+        offer missing any of them degrades to an empty string instead of
+        raising. Only a missing/malformed `items`/`id` shape is treated as
+        an error.
+        """
+        try:
+            response = httpx.get(
+                f"{self._api_base_url}/products/{ucode}/offers",
+                headers={"Authorization": f"Bearer {access_token}"},
+                timeout=self._timeout,
+            )
+            response.raise_for_status()
+            payload = response.json()
+            items = payload["items"] if isinstance(payload, dict) else payload
+            return [
+                HotmartOffer(
+                    id=str(item["id"]),
+                    price=item.get("price", ""),
+                    currency=item.get("currency", ""),
+                    description=item.get("description", ""),
+                )
+                for item in items
+            ]
+        except httpx.HTTPError as exc:
+            raise HotmartClientError(f"hotmart offer list request failed: {exc}") from exc
+        except (KeyError, ValueError, TypeError) as exc:
+            raise HotmartClientError("hotmart offer response had an unexpected shape") from exc
 
 
 class FakeHotmartClient(HotmartClient):
@@ -147,9 +195,20 @@ class FakeHotmartClient(HotmartClient):
         return [
             HotmartProduct(
                 id="fake-product-1",
+                ucode="fake-ucode-1",
                 name="Fake Product",
                 is_active=True,
                 checkout_url="https://example.com/checkout/fake-product-1",
+            )
+        ]
+
+    def list_offers(self, access_token: str, ucode: str) -> list[HotmartOffer]:
+        return [
+            HotmartOffer(
+                id="fake-offer-1",
+                price="97.00",
+                currency="USD",
+                description="",
             )
         ]
 

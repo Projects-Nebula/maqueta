@@ -195,3 +195,40 @@ class TestLinkOwnerScoping:
         assert response.status_code == 200
         ids = {row["hotmart_product_id"] for row in response.data}
         assert ids == {"prod-1"}
+
+
+class TestLinkMethodRestrictions:
+    def test_put_is_not_allowed(self, api, user):
+        connection = _connection(user)
+        template = _template(user)
+        link = HotmartProductLink.objects.create(
+            connection=connection,
+            user_template=template,
+            hotmart_product_id="prod-1",
+            checkout_url="https://hotmart.example.com/checkout/prod-1",
+        )
+
+        response = api.put(
+            f"{LINKS_URL}{link.id}/",
+            {
+                "user_template": template.id,
+                "hotmart_product_id": "prod-1",
+                "checkout_url": "https://hotmart.example.com/checkout/prod-1",
+            },
+        )
+
+        assert response.status_code == 405
+
+    def test_patch_is_not_allowed(self, api, user):
+        connection = _connection(user)
+        template = _template(user)
+        link = HotmartProductLink.objects.create(
+            connection=connection,
+            user_template=template,
+            hotmart_product_id="prod-1",
+            checkout_url="https://hotmart.example.com/checkout/prod-1",
+        )
+
+        response = api.patch(f"{LINKS_URL}{link.id}/", {"product_name": "Renamed"})
+
+        assert response.status_code == 405
