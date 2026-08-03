@@ -42,7 +42,7 @@ env = environ.Env(
     EMAIL_HOST_USER=(str, ""),
     EMAIL_HOST_PASSWORD=(str, ""),
     HOTMART_AUTH_BASE_URL=(str, "https://api-sec-vlc.hotmart.com/security/oauth"),
-    HOTMART_API_BASE_URL=(str, "https://developers.hotmart.com/payments/api/v1"),
+    HOTMART_API_BASE_URL=(str, "https://developers.hotmart.com/products/api/v1"),
     HOTMART_REQUEST_TIMEOUT=(int, 10),
 )
 
