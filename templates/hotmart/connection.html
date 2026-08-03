@@ -37,6 +37,19 @@
     .btn.primary { background: var(--primary); color: #fff; }
     .btn.danger { background: #d33; color: #fff; }
     .btn:disabled { cursor: wait; opacity: .55; }
+    .guide { margin: 24px 0 0; }
+    .guide h2 { font-size: 16px; margin: 0 0 12px; }
+    .guide ol { margin: 0; padding-left: 20px; color: var(--muted); font-size: 14px; }
+    .guide li { margin-bottom: 8px; }
+    .guide li::marker { color: var(--text); font-weight: 700; }
+    .credentials-form { margin-top: 20px; text-align: left; }
+    .credentials-form .field { display: block; margin-bottom: 14px; font-size: 14px; font-weight: 600; }
+    .credentials-form .field span { display: block; margin-bottom: 6px; }
+    .credentials-form .control {
+      width: 100%; padding: 9px 10px; border: 1px solid var(--border); border-radius: 8px;
+      font: inherit; background: var(--app-bg); color: var(--text);
+    }
+    .credentials-form .btn { width: 100%; }
   </style>
 </head>
 <body>
@@ -59,8 +72,45 @@
         <button id="disconnectBtn" class="btn danger" type="button">Desconectar cuenta</button>
       {% else %}
         <p class="connection-status disconnected">No conectado</p>
-        <a class="btn primary" href="{% url 'hotmart:connect' %}">Conectar cuenta de Hotmart</a>
       {% endif %}
+
+      <form id="credentialsForm" class="credentials-form" data-connected="{% if connected %}true{% else %}false{% endif %}">
+        <label class="field">
+          <span>Client ID{% if connected %} (ya configurado){% endif %}</span>
+          <input
+            id="clientIdInput"
+            class="control"
+            type="password"
+            name="client_id"
+            autocomplete="off"
+            placeholder="{% if connected %}Dejar en blanco para no cambiar{% else %}Pegá tu Client ID{% endif %}"
+          >
+        </label>
+        <label class="field">
+          <span>Client Secret{% if connected %} (ya configurado){% endif %}</span>
+          <input
+            id="clientSecretInput"
+            class="control"
+            type="password"
+            name="client_secret"
+            autocomplete="off"
+            placeholder="{% if connected %}Dejar en blanco para no cambiar{% else %}Pegá tu Client Secret{% endif %}"
+          >
+        </label>
+        <button id="saveCredentialsBtn" class="btn primary" type="submit">
+          {% if connected %}Actualizar credenciales{% else %}Conectar cuenta de Hotmart{% endif %}
+        </button>
+      </form>
+    </div>
+
+    <div class="guide">
+      <h2>Cómo conseguir tus credenciales</h2>
+      <ol>
+        <li>Entrá a tu cuenta de Hotmart y andá a <strong>Herramientas</strong> → <strong>Credenciales Hotmart</strong>.</li>
+        <li>Generá (o copiá) tu <strong>Client ID</strong> y tu <strong>Client Secret</strong> desde ahí — son las credenciales de tu propia cuenta, no hace falta ninguna aprobación externa.</li>
+        <li>Pegalas en el formulario de arriba y guardá. Validamos las credenciales contra Hotmart antes de guardarlas, así que si algo está mal te avisamos al toque.</li>
+        <li>Con la cuenta conectada vas a poder ver tus productos de Hotmart y vincular cada uno a una landing para editarla y publicarla.</li>
+      </ol>
     </div>
   </main>
 

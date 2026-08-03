@@ -10,9 +10,7 @@ from __future__ import annotations
 import logging
 
 from django.contrib.auth.decorators import login_required
-from django.http import HttpResponse, HttpResponseRedirect
 from django.shortcuts import get_object_or_404, render
-from django.views.decorators.http import require_http_methods
 from rest_framework import viewsets
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -20,7 +18,6 @@ from rest_framework.views import APIView
 
 from .client import HotmartClientError, build_hotmart_client
 from .models import HotmartConnection, HotmartProductLink
-from .oauth import build_authorize_url, issue_state
 from .serializers import HotmartCredentialsSerializer, HotmartProductLinkSerializer
 from .services import HotmartReconnectRequired, ensure_fresh_token, reconcile_products
 
@@ -30,37 +27,13 @@ logger = logging.getLogger(__name__)
 @login_required
 def connection_view(request):
     """/hotmart/ — connection status page shell. All CRUD happens
-    client-side against /api/hotmart/* (static/hotmart/connection.js).
-    The catalog/link UI lands in a later PR; this shell only shows
-    connect/disconnect for now."""
-    connected = HotmartConnection.objects.filter(owner=request.user).exists()
+    client-side against /api/hotmart/* (static/hotmart/connection.js):
+    the credential paste form POSTs to CredentialsView, disconnect POSTs to
+    DisconnectView. The catalog/link UI lands in a later PR; this shell
+    only shows connect/disconnect for now."""
+    connection = HotmartConnection.objects.filter(owner=request.user).first()
+    connected = connection is not None and connection.has_credentials()
     return render(request, "hotmart/connection.html", {"connected": connected})
-
-
-@login_required
-@require_http_methods(["GET"])
-def connect_view(request):
-    """/hotmart/conectar/ — issues a signed, session-bound, single-use
-    state and redirects to Hotmart's authorize endpoint. There is no
-    next/return_to param anywhere in this flow (design ADR: the
-    post-callback destination is a hardcoded reverse())."""
-    state = issue_state(request)
-    authorize_url = build_authorize_url(request, state)
-    return HttpResponseRedirect(authorize_url)
-
-
-@login_required
-@require_http_methods(["GET"])
-def callback_view(request):
-    """/hotmart/callback/ — STUBBED to 410 Gone (PR A of the
-    developer-credentials pivot). The `authorization_code` exchange this
-    view used to perform is no longer reachable now that
-    `build_hotmart_client()` requires per-seller Developer Credentials;
-    stubbing (rather than deleting) keeps `main` from carrying a
-    live-but-broken exchange path mid-stack. PR B deletes this view, along
-    with `connect_view` and `oauth.py`, once the paste-credential form
-    ships (see design's "Migration / Rollout" delivery note)."""
-    return HttpResponse(status=410)
 
 
 class CredentialsView(APIView):

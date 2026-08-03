@@ -41,8 +41,6 @@ env = environ.Env(
     EMAIL_USE_TLS=(bool, True),
     EMAIL_HOST_USER=(str, ""),
     EMAIL_HOST_PASSWORD=(str, ""),
-    HOTMART_CLIENT_ID=(str, ""),
-    HOTMART_CLIENT_SECRET=(str, ""),
     HOTMART_AUTH_BASE_URL=(str, "https://api-sec-vlc.hotmart.com/security/oauth"),
     HOTMART_API_BASE_URL=(str, "https://developers.hotmart.com/payments/api/v1"),
     HOTMART_REQUEST_TIMEOUT=(int, 10),
@@ -208,12 +206,12 @@ ANALYTICS_RETENTION_DAYS = env("ANALYTICS_RETENTION_DAYS")
 ANALYTICS_COOKIE_MAX_AGE = env("ANALYTICS_COOKIE_MAX_AGE")
 
 # --- Hotmart integration ----------------------------------------------------
-# Platform-level OAuth app credentials (same handling as OPENAI_API_KEY —
-# one maqueta-owned Hotmart developer app; per-seller tokens live encrypted
-# on HotmartConnection, see apps/hotmart/models.py). Without both client id
-# and secret, build_hotmart_client() always returns the fake client.
-HOTMART_CLIENT_ID = env("HOTMART_CLIENT_ID")
-HOTMART_CLIENT_SECRET = env("HOTMART_CLIENT_SECRET")
+# No platform-level credentials: each seller pastes her own Developer
+# Credentials (client_credentials grant), stored encrypted on
+# HotmartConnection — see apps/hotmart/models.py and views.CredentialsView.
+# Only the shared API/auth base URLs and timeout remain platform-level
+# config. Without a connection's own client id and secret,
+# build_hotmart_client() always returns the fake client.
 HOTMART_AUTH_BASE_URL = env("HOTMART_AUTH_BASE_URL")
 HOTMART_API_BASE_URL = env("HOTMART_API_BASE_URL")
 HOTMART_REQUEST_TIMEOUT = env("HOTMART_REQUEST_TIMEOUT")
