@@ -24,12 +24,12 @@ class Command(BaseCommand):
     )
 
     def handle(self, *args, **options):
-        client = build_hotmart_client()
         reconciled = 0
         skipped = 0
 
         connections = HotmartConnection.objects.filter(product_links__isnull=False).distinct()
         for connection in connections:
+            client = build_hotmart_client(connection.get_credentials())
             try:
                 access_token = ensure_fresh_token(connection, client)
                 products = client.list_products(access_token)

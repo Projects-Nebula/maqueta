@@ -1,5 +1,4 @@
 import time
-from urllib.parse import parse_qs, urlparse
 
 import pytest
 from django.contrib.sessions.middleware import SessionMiddleware
@@ -20,10 +19,6 @@ def _session_request():
     SessionMiddleware(lambda r: None).process_request(request)
     request.session.save()
     return request
-
-
-def _extract_state(location):
-    return parse_qs(urlparse(location).query)["state"][0]
 
 
 class TestIssueAndConsumeState:
@@ -101,56 +96,26 @@ class TestConnectFlow:
         if response.status_code == 302:
             assert "login" in response["Location"]
 
-    def test_callback_happy_path_creates_connection(self, user):
-        client = Client()
-        client.force_login(user)
-        connect_response = client.get(CONNECT_URL)
-        state = _extract_state(connect_response["Location"])
-
-        callback_response = client.get(CALLBACK_URL, {"code": "some-code", "state": state})
-
-        assert callback_response.status_code == 302
-        connection = HotmartConnection.objects.get(owner=user)
-        access_token = connection.get_access_token()
-        assert access_token
-        assert access_token not in callback_response.content.decode()
-
-    def test_callback_rejects_missing_state(self, user):
+    def test_callback_is_stubbed_to_410(self, user):
+        # PR A (backend swap): the authorization_code exchange is no
+        # longer reachable now that build_hotmart_client() requires
+        # per-seller Developer Credentials. callback_view is stubbed to
+        # 410 Gone rather than deleted, so main is never left with a
+        # live-but-broken exchange path mid-stack; PR B removes it along
+        # with oauth.py and connect_view (see design's delivery note).
         client = Client()
         client.force_login(user)
 
-        response = client.get(CALLBACK_URL, {"code": "some-code"})
+        response = client.get(CALLBACK_URL, {"code": "some-code", "state": "irrelevant"})
 
-        assert response.status_code == 400
+        assert response.status_code == 410
         assert not HotmartConnection.objects.filter(owner=user).exists()
-
-    def test_callback_rejects_bad_state(self, user):
-        client = Client()
-        client.force_login(user)
-        client.get(CONNECT_URL)
-
-        response = client.get(CALLBACK_URL, {"code": "some-code", "state": "not-a-valid-state"})
-
-        assert response.status_code == 400
-        assert not HotmartConnection.objects.filter(owner=user).exists()
-
-    def test_callback_rejects_replayed_state(self, user):
-        client = Client()
-        client.force_login(user)
-        connect_response = client.get(CONNECT_URL)
-        state = _extract_state(connect_response["Location"])
-        client.get(CALLBACK_URL, {"code": "some-code", "state": state})
-
-        replay_response = client.get(CALLBACK_URL, {"code": "some-other-code", "state": state})
-
-        assert replay_response.status_code == 400
-        assert HotmartConnection.objects.filter(owner=user).count() == 1
 
     def test_disconnect_deletes_connection(self, user):
         client = Client()
         client.force_login(user)
         connection = HotmartConnection.objects.create(owner=user)
-        connection.set_tokens(access="a", refresh="r", expires_in=3600)
+        connection.set_tokens(access="a", expires_in=3600)
         connection.save()
 
         response = client.post(DISCONNECT_URL)

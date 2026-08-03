@@ -23,7 +23,7 @@ class HotmartConnectionAdmin(admin.ModelAdmin):
         "connected_at",
         "updated_at",
     ]
-    exclude = ["access_token_encrypted", "refresh_token_encrypted"]
+    exclude = ["credentials_encrypted", "access_token_encrypted"]
 
     def has_add_permission(self, request):
         return False

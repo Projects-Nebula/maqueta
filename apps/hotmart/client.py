@@ -1,11 +1,13 @@
-"""Hotmart HTTP client seam (see openspec design: hotmart-oauth-connect).
+"""Hotmart HTTP client seam (see openspec design:
+hotmart-developer-credentials-pivot).
 
 Every Hotmart HTTP call goes through this module — parsing is confined
 here, no other module sees raw Hotmart JSON. `build_hotmart_client()`
-mirrors `apps/storefront/payments.py`'s `build_payment_provider`: an
-incomplete platform credential pair (HOTMART_CLIENT_ID /
-HOTMART_CLIENT_SECRET) is treated exactly like no credentials at all —
-never a real client with partial config.
+mirrors `apps/storefront/payments.py`'s `build_payment_provider`: it takes
+a per-seller credentials dict (from `HotmartConnection.get_credentials()`),
+never reads platform-level settings. An incomplete credential pair is
+treated exactly like no credentials at all — never a real client with
+partial config.
 """
 
 from __future__ import annotations
@@ -26,7 +28,6 @@ class HotmartClientError(Exception):
 @dataclass(frozen=True)
 class TokenBundle:
     access_token: str
-    refresh_token: str
     expires_in: int
 
 
@@ -40,10 +41,7 @@ class HotmartProduct:
 
 class HotmartClient(ABC):
     @abstractmethod
-    def exchange_code(self, code: str) -> TokenBundle: ...
-
-    @abstractmethod
-    def refresh(self, refresh_token: str) -> TokenBundle: ...
+    def fetch_token(self) -> TokenBundle: ...
 
     @abstractmethod
     def list_products(self, access_token: str) -> list[HotmartProduct]: ...
@@ -70,23 +68,16 @@ class RealHotmartClient(HotmartClient):
         self._api_base_url = api_base_url.rstrip("/")
         self._timeout = timeout
 
-    def exchange_code(self, code: str) -> TokenBundle:
+    def fetch_token(self) -> TokenBundle:
+        """`client_credentials` grant — Basic auth AND client_id/secret in
+        the body (open question in design.md: Hotmart's docs/screenshots
+        suggest Basic auth; sending both keeps this tolerant of either
+        contract without a second code path)."""
         return self._token_request(
             {
-                "grant_type": "authorization_code",
+                "grant_type": "client_credentials",
                 "client_id": self._client_id,
                 "client_secret": self._client_secret,
-                "code": code,
-            }
-        )
-
-    def refresh(self, refresh_token: str) -> TokenBundle:
-        return self._token_request(
-            {
-                "grant_type": "refresh_token",
-                "client_id": self._client_id,
-                "client_secret": self._client_secret,
-                "refresh_token": refresh_token,
             }
         )
 
@@ -95,13 +86,13 @@ class RealHotmartClient(HotmartClient):
             response = httpx.post(
                 f"{self._auth_base_url}/token",
                 data=data,
+                auth=(self._client_id, self._client_secret),
                 timeout=self._timeout,
             )
             response.raise_for_status()
             payload = response.json()
             return TokenBundle(
                 access_token=payload["access_token"],
-                refresh_token=payload["refresh_token"],
                 expires_in=int(payload["expires_in"]),
             )
         except httpx.HTTPError as exc:
@@ -135,22 +126,14 @@ class RealHotmartClient(HotmartClient):
 
 
 class FakeHotmartClient(HotmartClient):
-    """Offline stand-in used whenever platform credentials are absent or
-    incomplete — same role as apps.storefront.payments' Fake* providers.
-    Lets the entire test suite (and local dev) run green with zero Hotmart
-    credentials."""
+    """Offline stand-in used whenever a connection's stored credentials are
+    absent or incomplete — same role as apps.storefront.payments' Fake*
+    providers. Lets the entire test suite (and local dev) run green with
+    zero Hotmart credentials."""
 
-    def exchange_code(self, code: str) -> TokenBundle:
+    def fetch_token(self) -> TokenBundle:
         return TokenBundle(
             access_token=f"fake-access-{uuid.uuid4().hex}",
-            refresh_token=f"fake-refresh-{uuid.uuid4().hex}",
-            expires_in=3600,
-        )
-
-    def refresh(self, refresh_token: str) -> TokenBundle:
-        return TokenBundle(
-            access_token=f"fake-access-{uuid.uuid4().hex}",
-            refresh_token=f"fake-refresh-{uuid.uuid4().hex}",
             expires_in=3600,
         )
 
@@ -165,13 +148,14 @@ class FakeHotmartClient(HotmartClient):
         ]
 
 
-def build_hotmart_client() -> HotmartClient:
-    """settings.HOTMART_CLIENT_ID/SECRET both set -> RealHotmartClient,
+def build_hotmart_client(credentials: dict | None) -> HotmartClient:
+    """`credentials` (a seller's decrypted `HotmartConnection.get_credentials()`
+    dict, or None/empty) both client_id/client_secret set -> RealHotmartClient,
     otherwise FakeHotmartClient. Never a real client with partial
     credentials — an incomplete config is exactly as "not configured" as no
     config at all (same contract as build_payment_provider)."""
-    client_id = settings.HOTMART_CLIENT_ID
-    client_secret = settings.HOTMART_CLIENT_SECRET
+    client_id = (credentials or {}).get("client_id", "")
+    client_secret = (credentials or {}).get("client_secret", "")
     if client_id and client_secret:
         return RealHotmartClient(
             client_id=client_id,

@@ -1,18 +1,17 @@
-"""Hotmart OAuth connect/callback/disconnect views + page shell (see
-openspec design: hotmart-oauth-connect, "Data Flow" section). No token
-ever reaches a template, response body, or log line — see design doc's
-Security Approach and the spec's "No Token Exposure" requirement.
+"""Hotmart connect/disconnect views + page shell (see openspec design:
+hotmart-developer-credentials-pivot, "Data Flow" section). No credential
+or token value ever reaches a template, response body, or log line — see
+design doc's Security Approach and the spec's Encrypted Storage
+requirement.
 """
 
 from __future__ import annotations
 
 import logging
 
-from django.contrib import messages
 from django.contrib.auth.decorators import login_required
-from django.http import HttpResponseBadRequest, HttpResponseRedirect
+from django.http import HttpResponse, HttpResponseRedirect
 from django.shortcuts import get_object_or_404, render
-from django.urls import reverse
 from django.views.decorators.http import require_http_methods
 from rest_framework import viewsets
 from rest_framework.permissions import IsAuthenticated
@@ -21,8 +20,8 @@ from rest_framework.views import APIView
 
 from .client import HotmartClientError, build_hotmart_client
 from .models import HotmartConnection, HotmartProductLink
-from .oauth import build_authorize_url, consume_state, issue_state
-from .serializers import HotmartProductLinkSerializer
+from .oauth import build_authorize_url, issue_state
+from .serializers import HotmartCredentialsSerializer, HotmartProductLinkSerializer
 from .services import HotmartReconnectRequired, ensure_fresh_token, reconcile_products
 
 logger = logging.getLogger(__name__)
@@ -53,36 +52,64 @@ def connect_view(request):
 @login_required
 @require_http_methods(["GET"])
 def callback_view(request):
-    """/hotmart/callback/ — verifies state, exchanges the code for
-    tokens server-side, and stores them encrypted on the user's
-    HotmartConnection. Any state failure -> 400, no token exchange
-    attempted, no row created (spec: "Invalid or expired state")."""
-    state = request.GET.get("state", "")
-    code = request.GET.get("code", "")
+    """/hotmart/callback/ — STUBBED to 410 Gone (PR A of the
+    developer-credentials pivot). The `authorization_code` exchange this
+    view used to perform is no longer reachable now that
+    `build_hotmart_client()` requires per-seller Developer Credentials;
+    stubbing (rather than deleting) keeps `main` from carrying a
+    live-but-broken exchange path mid-stack. PR B deletes this view, along
+    with `connect_view` and `oauth.py`, once the paste-credential form
+    ships (see design's "Migration / Rollout" delivery note)."""
+    return HttpResponse(status=410)
 
-    if not consume_state(request, state):
-        return HttpResponseBadRequest("invalid or expired state")
 
-    if not code:
-        return HttpResponseBadRequest("missing code")
+class CredentialsView(APIView):
+    """POST /api/hotmart/credentials/ — validate-before-persist (design:
+    "validate against Hotmart before persisting; no 'unverified' state").
+    Builds a throwaway real client from the submitted pair, calls
+    `fetch_token()`, and only on success persists the encrypted
+    credentials AND the returned access token. A blank field keeps the
+    corresponding stored value (spec: "Rotating one credential")."""
 
-    client = build_hotmart_client()
-    try:
-        tokens = client.exchange_code(code)
-    except HotmartClientError:
-        logger.exception("hotmart token exchange failed")
-        return HttpResponseBadRequest("token exchange failed")
+    permission_classes = [IsAuthenticated]
 
-    connection, _created = HotmartConnection.objects.get_or_create(owner=request.user)
-    connection.set_tokens(
-        access=tokens.access_token,
-        refresh=tokens.refresh_token,
-        expires_in=tokens.expires_in,
-    )
-    connection.save()
+    def post(self, request):
+        serializer = HotmartCredentialsSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
 
-    messages.success(request, "Tu cuenta de Hotmart fue conectada correctamente.")
-    return HttpResponseRedirect(reverse("hotmart:connection"))
+        connection = HotmartConnection.objects.filter(owner=request.user).first()
+        existing = connection.get_credentials() if connection else {}
+
+        client_id = serializer.validated_data["client_id"] or existing.get("client_id", "")
+        client_secret = serializer.validated_data["client_secret"] or existing.get(
+            "client_secret", ""
+        )
+
+        if not client_id or not client_secret:
+            return Response({"ok": False, "error": "invalid_credentials"}, status=400)
+
+        client = build_hotmart_client({"client_id": client_id, "client_secret": client_secret})
+        try:
+            tokens = client.fetch_token()
+        except HotmartClientError:
+            logger.warning("hotmart credential validation failed")
+            return Response({"ok": False, "error": "invalid_credentials"}, status=400)
+
+        if connection is None:
+            connection = HotmartConnection(owner=request.user)
+        connection.set_credentials({"client_id": client_id, "client_secret": client_secret})
+        connection.set_tokens(access=tokens.access_token, expires_in=tokens.expires_in)
+        connection.save()
+
+        return Response(
+            {
+                "connected": True,
+                "has_credentials": {
+                    "client_id": bool(client_id),
+                    "client_secret": bool(client_secret),
+                },
+            }
+        )
 
 
 class DisconnectView(APIView):
@@ -110,7 +137,7 @@ class ProductListView(APIView):
         if connection is None:
             return Response({"connected": False, "products": []})
 
-        client = build_hotmart_client()
+        client = build_hotmart_client(connection.get_credentials())
         try:
             access_token = ensure_fresh_token(connection, client)
         except HotmartReconnectRequired:

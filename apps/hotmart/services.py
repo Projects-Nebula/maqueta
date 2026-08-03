@@ -15,36 +15,34 @@ from .models import HotmartConnection, HotmartProductLink
 
 
 class HotmartReconnectRequired(Exception):
-    """Raised when a stored refresh token is missing or Hotmart rejects
-    it. Callers surface this as "reconnect required" (HTTP 409), never a
-    500 — same tradeoff as `CredentialDecryptionError` in crypto.py."""
+    """Raised when a connection has no stored credentials or Hotmart
+    rejects a re-exchange attempt. Callers surface this as "reconnect
+    required" (HTTP 409), never a 500 — same tradeoff as
+    `CredentialDecryptionError` in crypto.py."""
 
 
 def ensure_fresh_token(connection: HotmartConnection, client: HotmartClient) -> str:
     """Returns a valid access token for `connection`, transparently
-    refreshing it first if expired (spec: "Transparent Token Refresh").
-    Never returns an empty string — raises HotmartReconnectRequired
-    instead, so callers can't accidentally send an empty Bearer token
-    upstream."""
+    re-exchanging it first if expired (spec: "Token Re-Exchange on Expiry
+    (No Refresh Token)"). `client_credentials` grants never return a
+    refresh token, so re-exchange needs no user interaction — reconnect is
+    only raised when credentials are absent or Hotmart rejects them. Never
+    returns an empty string — raises HotmartReconnectRequired instead, so
+    callers can't accidentally send an empty Bearer token upstream."""
     if not connection.is_expired:
         access_token = connection.get_access_token()
         if access_token:
             return access_token
 
-    refresh_token = connection.get_refresh_token()
-    if not refresh_token:
-        raise HotmartReconnectRequired("no refresh token stored")
+    if not connection.has_credentials():
+        raise HotmartReconnectRequired("no credentials stored")
 
     try:
-        tokens = client.refresh(refresh_token)
+        tokens = client.fetch_token()
     except HotmartClientError as exc:
         raise HotmartReconnectRequired(str(exc)) from exc
 
-    connection.set_tokens(
-        access=tokens.access_token,
-        refresh=tokens.refresh_token,
-        expires_in=tokens.expires_in,
-    )
+    connection.set_tokens(access=tokens.access_token, expires_in=tokens.expires_in)
     connection.save()
     return connection.get_access_token()
 

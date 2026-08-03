@@ -1,12 +1,15 @@
-"""Hotmart integration models (see openspec design: hotmart-oauth-connect).
+"""Hotmart integration models (see openspec design:
+hotmart-developer-credentials-pivot).
 
-Per-seller OAuth tokens are encrypted at rest with the EXISTING
-apps/storefront/crypto.py (Fernet over SHA256(SECRET_KEY)) — no new crypto
-is introduced here, same as PaymentGatewayConfig.credentials_encrypted.
+Per-seller Developer Credentials (`client_id`/`client_secret`) and access
+tokens are encrypted at rest with the EXISTING apps/storefront/crypto.py
+(Fernet over SHA256(SECRET_KEY)) — no new crypto is introduced here, same
+as PaymentGatewayConfig.credentials_encrypted.
 """
 
 from __future__ import annotations
 
+import json
 from datetime import timedelta
 
 from django.conf import settings
@@ -29,8 +32,8 @@ class HotmartConnection(models.Model):
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="hotmart_connection"
     )
     hotmart_account_id = models.CharField(max_length=128, blank=True)
+    credentials_encrypted = models.TextField(blank=True)
     access_token_encrypted = models.TextField(blank=True)
-    refresh_token_encrypted = models.TextField(blank=True)
     expires_at = models.DateTimeField(null=True, blank=True)
     connected_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -38,9 +41,28 @@ class HotmartConnection(models.Model):
     def __str__(self):
         return f"{self.owner_id}:hotmart"
 
-    def set_tokens(self, *, access: str, refresh: str, expires_in: int) -> None:
+    def set_credentials(self, data: dict) -> None:
+        """Stores `client_id`/`client_secret` as a single Fernet-encrypted
+        JSON blob (mirrors PaymentGatewayConfig.set_credentials)."""
+        self.credentials_encrypted = encrypt_value(json.dumps(data))
+
+    def get_credentials(self) -> dict:
+        if not self.credentials_encrypted:
+            return {}
+        try:
+            return json.loads(decrypt_value(self.credentials_encrypted))
+        except CredentialDecryptionError:
+            return {}
+
+    def has_credentials(self) -> bool:
+        creds = self.get_credentials()
+        return bool(creds.get("client_id")) and bool(creds.get("client_secret"))
+
+    def set_tokens(self, *, access: str, expires_in: int) -> None:
+        """`client_credentials` grants never return a refresh token — only
+        the access token and its expiry are stored (see design's "expiry
+        re-exchanges" decision)."""
         self.access_token_encrypted = encrypt_value(access)
-        self.refresh_token_encrypted = encrypt_value(refresh)
         self.expires_at = timezone.now() + timedelta(seconds=expires_in)
 
     def get_access_token(self) -> str:
@@ -48,14 +70,6 @@ class HotmartConnection(models.Model):
             return ""
         try:
             return decrypt_value(self.access_token_encrypted)
-        except CredentialDecryptionError:
-            return ""
-
-    def get_refresh_token(self) -> str:
-        if not self.refresh_token_encrypted:
-            return ""
-        try:
-            return decrypt_value(self.refresh_token_encrypted)
         except CredentialDecryptionError:
             return ""
 

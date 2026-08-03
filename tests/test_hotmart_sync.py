@@ -11,13 +11,27 @@ from apps.hotmart.models import HotmartConnection, HotmartProductLink
 pytestmark = pytest.mark.django_db
 
 
+@pytest.fixture(autouse=True)
+def _fake_client_by_default(monkeypatch):
+    # Test-seam note (design.md): a connection now always carries stored
+    # credentials, so the command's build_hotmart_client(connection.get_credentials())
+    # would otherwise select RealHotmartClient and attempt a real HTTP call.
+    from apps.hotmart.client import FakeHotmartClient
+
+    monkeypatch.setattr(
+        "apps.hotmart.management.commands.sync_hotmart_connections.build_hotmart_client",
+        lambda credentials: FakeHotmartClient(),
+    )
+
+
 def _state():
     return {"document": {"body": {"children": []}}}
 
 
 def _connected(user):
     connection = HotmartConnection.objects.create(owner=user)
-    connection.set_tokens(access="a", refresh="r", expires_in=3600)
+    connection.set_credentials({"client_id": "id-1", "client_secret": "secret-1"})
+    connection.set_tokens(access="a", expires_in=3600)
     connection.save()
     return connection
 

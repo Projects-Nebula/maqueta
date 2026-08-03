@@ -1,6 +1,6 @@
 """Token-free serializers for the Hotmart API surface (see openspec design:
-hotmart-oauth-connect, "Security Approach" — no token/ciphertext ever
-appears in a response).
+hotmart-developer-credentials-pivot, "Security Approach" — no
+credential/token/ciphertext ever appears in a response).
 """
 
 from __future__ import annotations
@@ -10,6 +10,19 @@ from rest_framework import serializers
 from apps.editor.models import UserTemplate
 
 from .models import HotmartConnection, HotmartProductLink
+
+
+class HotmartCredentialsSerializer(serializers.Serializer):
+    """Write-only input for POST /api/hotmart/credentials/. Both fields
+    are optional (blank means "keep the existing stored value" — spec:
+    "Rotating one credential") — CredentialsView resolves the blank-keeps-
+    existing merge, this serializer only validates shape/presence of
+    fields."""
+
+    client_id = serializers.CharField(write_only=True, required=False, allow_blank=True, default="")
+    client_secret = serializers.CharField(
+        write_only=True, required=False, allow_blank=True, default=""
+    )
 
 
 class HotmartConnectionSerializer(serializers.ModelSerializer):

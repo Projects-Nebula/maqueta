@@ -20,8 +20,8 @@ PRODUCTS_URL = "/api/hotmart/products/"
 
 
 class RaisingRefreshClient(FakeHotmartClient):
-    def refresh(self, refresh_token):
-        raise HotmartClientError("refresh rejected upstream")
+    def fetch_token(self):
+        raise HotmartClientError("re-exchange rejected upstream")
 
 
 def _state():
@@ -30,7 +30,8 @@ def _state():
 
 def _connected(user, *, expired=False):
     connection = HotmartConnection.objects.create(owner=user)
-    connection.set_tokens(access="initial-access", refresh="initial-refresh", expires_in=3600)
+    connection.set_credentials({"client_id": "id-1", "client_secret": "secret-1"})
+    connection.set_tokens(access="initial-access", expires_in=3600)
     if expired:
         connection.expires_at = timezone.now() - timedelta(seconds=1)
     connection.save()
@@ -78,7 +79,7 @@ class TestEnsureFreshToken:
         with pytest.raises(HotmartReconnectRequired):
             ensure_fresh_token(connection, client)
 
-    def test_raises_reconnect_required_when_no_refresh_token_stored(self, user):
+    def test_raises_reconnect_required_when_no_credentials_stored(self, user):
         connection = HotmartConnection.objects.create(owner=user)
         client = FakeHotmartClient()
 
@@ -155,8 +156,19 @@ class TestReconcileProducts:
 
 
 class TestProductListView:
+    # Test-seam note (design.md): a connection now always carries stored
+    # credentials, so the old "no platform creds -> Fake" path no longer
+    # triggers implicitly — every test here monkeypatches
+    # apps.hotmart.views.build_hotmart_client explicitly, defaulting to
+    # FakeHotmartClient so no test accidentally makes a real HTTP call.
+    @pytest.fixture(autouse=True)
+    def _fake_client_by_default(self, monkeypatch):
+        monkeypatch.setattr(
+            "apps.hotmart.views.build_hotmart_client", lambda credentials: FakeHotmartClient()
+        )
+
     def test_not_connected_returns_connected_false_without_upstream_call(self, api, monkeypatch):
-        def _boom():
+        def _boom(credentials):
             raise AssertionError("must not build a Hotmart client when not connected")
 
         monkeypatch.setattr("apps.hotmart.views.build_hotmart_client", _boom)
@@ -180,7 +192,7 @@ class TestProductListView:
     def test_refresh_failure_returns_409_reconnect(self, api, user, monkeypatch):
         _connected(user, expired=True)
         monkeypatch.setattr(
-            "apps.hotmart.views.build_hotmart_client", lambda: RaisingRefreshClient()
+            "apps.hotmart.views.build_hotmart_client", lambda credentials: RaisingRefreshClient()
         )
 
         response = api.get(PRODUCTS_URL)

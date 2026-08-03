@@ -18,7 +18,7 @@ def _state():
 
 def _connection(user):
     connection = HotmartConnection.objects.create(owner=user)
-    connection.set_tokens(access="a", refresh="r", expires_in=3600)
+    connection.set_tokens(access="a", expires_in=3600)
     connection.save()
     return connection
 
