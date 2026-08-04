@@ -4,6 +4,7 @@ from decimal import Decimal
 import pytest
 from django.core.management import call_command
 from django.core.management.base import CommandError
+from django.test import Client
 from django.utils import timezone
 from rest_framework import status
 
@@ -269,6 +270,19 @@ def test_dashboard_requires_authentication(anon_api):
     assert dashboard.status_code == status.HTTP_302_FOUND
     assert "/login/" in dashboard["Location"]
     assert overview.status_code == status.HTTP_403_FORBIDDEN
+
+
+def test_dashboard_renders_for_authenticated_user(user):
+    # Regression: dashboard.html's nav previously linked storefront:products/
+    # payment-config, which raises NoReverseMatch now that apps.storefront
+    # is gone — manage.py check never catches {% url %} tags, only a real
+    # render does.
+    client = Client()
+    client.force_login(user)
+
+    response = client.get("/analytics/")
+
+    assert response.status_code == 200
 
 
 def test_purge_analytics_deletes_expired_sessions_and_orphan_visitors(user):

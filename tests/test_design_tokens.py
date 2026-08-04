@@ -7,10 +7,6 @@ TOKEN_PAGES = (
     "templates/editor/template_wizard.html",
     "templates/editor/home.html",
     "templates/editor/gallery.html",
-    "templates/storefront/products.html",
-    "templates/storefront/payment_config.html",
-    "templates/storefront/success.html",
-    "templates/storefront/checkout_cancel.html",
     "templates/registration/login.html",
     "templates/registration/signup.html",
 )

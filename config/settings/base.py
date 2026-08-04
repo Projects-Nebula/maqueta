@@ -27,7 +27,6 @@ env = environ.Env(
     # large-JSON task. See WizardAIService.
     OPENCODE_ZEN_CHAT_MODEL=(str, "mimo-v2.5"),
     OPENCODE_ZEN_BASE_URL=(str, "https://opencode.ai/zen/go/v1"),
-    DEFAULT_CURRENCY=(str, "usd"),
     ANALYTICS_RETENTION_DAYS=(int, 90),
     ANALYTICS_COOKIE_MAX_AGE=(int, 60 * 60 * 24 * 365),
     # Console backend prints to stdout — safe, no external dependency,
@@ -69,7 +68,6 @@ INSTALLED_APPS = [
     "apps.editor",
     "apps.ai_assistant",
     "apps.projects",
-    "apps.storefront",
     "apps.analytics",
     "apps.vercel",
 ]
@@ -158,8 +156,6 @@ REST_FRAMEWORK = {
         "html_import": "20/m",
         "wizard_upload": "20/m",
         "public_template_view": "60/m",
-        "checkout_session_create": "10/m",
-        "digital_download": "20/m",
         "analytics_consent": "10/m",
         "analytics_collect": "120/m",
         "bundle_upload": "6/m",
@@ -186,11 +182,6 @@ OPENCODE_ZEN_BASE_URL = env("OPENCODE_ZEN_BASE_URL")
 # Provider is swappable; fake provider needs no API key (tests, local dev).
 AI_PROVIDER = env("AI_PROVIDER", default="openai" if OPENAI_API_KEY else "fake")
 
-# --- Storefront / payments --------------------------------------------------
-# Per-gateway credentials are owner-configured via /config (PaymentGatewayConfig,
-# encrypted at rest — see apps/storefront/crypto.py) rather than env vars: this
-# is a multi-tenant editor where each seller has their own Stripe/Mercado
-# Pago/etc account, not one global gateway for the whole deployment. Only
 EMAIL_BACKEND = env("EMAIL_BACKEND")
 DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL")
 EMAIL_HOST = env("EMAIL_HOST")
@@ -198,10 +189,6 @@ EMAIL_PORT = env("EMAIL_PORT")
 EMAIL_USE_TLS = env("EMAIL_USE_TLS")
 EMAIL_HOST_USER = env("EMAIL_HOST_USER")
 EMAIL_HOST_PASSWORD = env("EMAIL_HOST_PASSWORD")
-
-# DEFAULT_CURRENCY stays a deployment-wide setting (not a secret, not
-# per-gateway).
-DEFAULT_CURRENCY = env("DEFAULT_CURRENCY")
 
 # Anonymous analytics is opt-in and bounded by the retention command. The
 # visitor cookie is pseudonymous and intentionally separate from auth.session.

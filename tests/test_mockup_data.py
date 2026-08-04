@@ -6,7 +6,6 @@ from django.test import override_settings
 from apps.analytics.models import AnalyticsEvent, AnalyticsSession
 from apps.editor.models import Template, UserPalette, UserTemplate
 from apps.projects.models import Project, ProjectRevision
-from apps.storefront.models import Order, PaymentGatewayConfig, Product
 
 pytestmark = pytest.mark.django_db
 
@@ -31,8 +30,5 @@ def test_mockup_command_resets_and_populates_the_local_catalog():
     assert Project.objects.filter(owner__username="demo").count() == 1
     assert ProjectRevision.objects.filter(project__owner__username="demo").count() == 2
     assert UserPalette.objects.filter(owner__username="demo").count() == 3
-    assert Product.objects.filter(owner__username="demo").count() == 3
-    assert PaymentGatewayConfig.objects.filter(owner__username="demo", is_enabled=True).count() == 2
-    assert Order.objects.filter(status=Order.Status.PAID).count() == 1
     assert AnalyticsSession.objects.count() == 3
     assert AnalyticsEvent.objects.count() == 12

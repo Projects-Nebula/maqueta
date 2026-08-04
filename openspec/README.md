@@ -42,7 +42,6 @@ The system SHALL <behavior>.
 - `specs/projects/` — project persistence + revisions.
 - `specs/editor/` — editor shell, AI panel integration (session + CSRF auth),
   and the bounded template palette contract.
-- `specs/storefront/` — products, multi-gateway checkout, orders, downloads.
 - `specs/analytics/` — consent-gated anonymous collection, owner-scoped
   reporting, heatmaps, and retention.
 

@@ -25,8 +25,6 @@ from apps.editor.models import (
 )
 from apps.editor.palettes import PALETTE_PRESETS
 from apps.projects.models import Project, ProjectRevision
-from apps.storefront.models import Order, PaymentGatewayConfig, Product
-from apps.storefront.payments import GATEWAY_CHOICES
 
 DEMO_USERNAME = os.environ.get("MOCKUP_USERNAME", "demo")
 DEMO_EMAIL = os.environ.get("MOCKUP_EMAIL", "demo@example.com")
@@ -196,7 +194,7 @@ class Command(BaseCommand):
             self.stdout.write(f"{label}: {model.objects.count()}")
 
     def _delete_stored_files(self):
-        for model, field_name in ((UploadedAsset, "file"), (Product, "digital_file")):
+        for model, field_name in ((UploadedAsset, "file"),):
             for instance in model.objects.all().iterator():
                 stored_file = getattr(instance, field_name)
                 if stored_file.name:
@@ -274,70 +272,6 @@ class Command(BaseCommand):
                 ),
             ]
         )
-        download_product = Product.objects.create(
-            owner=demo,
-            name="Guía de rutina GlowSkin",
-            description="PDF de ejemplo para probar productos y descargas digitales.",
-            price_cents=2499,
-            image=product_image,
-        )
-        download_product.digital_file.save(
-            "mockup-guide.pdf", ContentFile(b"%PDF-1.4\n% mockup demo document\n"), save=True
-        )
-        Product.objects.create(
-            owner=demo,
-            name="Kit hidratación diaria",
-            description="Producto físico de muestra con imagen y compra simulada.",
-            price_cents=3999,
-            image=hero,
-        )
-        Product.objects.create(
-            owner=demo,
-            name="Producto archivado",
-            description="Producto inactivo para probar estados del catálogo.",
-            price_cents=999,
-            is_active=False,
-        )
-        PaymentGatewayConfig.objects.bulk_create(
-            [
-                PaymentGatewayConfig(
-                    owner=demo, gateway=gateway, is_enabled=gateway in {"stripe", "mercadopago"}
-                )
-                for gateway in GATEWAY_CHOICES
-            ]
-        )
-        Order.objects.bulk_create(
-            [
-                Order(
-                    product=download_product,
-                    gateway=Order.Gateway.STRIPE,
-                    gateway_session_id="mockup_paid_001",
-                    buyer_email="buyer@example.com",
-                    amount_cents=download_product.price_cents,
-                    currency=settings.DEFAULT_CURRENCY,
-                    status=Order.Status.PAID,
-                    download_token=Order.generate_download_token(),
-                ),
-                Order(
-                    product=download_product,
-                    gateway=Order.Gateway.MERCADOPAGO,
-                    gateway_session_id="mockup_pending_001",
-                    buyer_email="pending@example.com",
-                    amount_cents=download_product.price_cents,
-                    currency=settings.DEFAULT_CURRENCY,
-                    status=Order.Status.PENDING,
-                ),
-                Order(
-                    product=download_product,
-                    gateway=Order.Gateway.STRIPE,
-                    gateway_session_id="mockup_failed_001",
-                    buyer_email="failed@example.com",
-                    amount_cents=download_product.price_cents,
-                    currency=settings.DEFAULT_CURRENCY,
-                    status=Order.Status.FAILED,
-                ),
-            ]
-        )
         self._create_analytics(published)
         models = [
             ("Users", User),
@@ -346,9 +280,6 @@ class Command(BaseCommand):
             ("Projects", Project),
             ("Palettes", UserPalette),
             ("Assets", UploadedAsset),
-            ("Products", Product),
-            ("Gateway configs", PaymentGatewayConfig),
-            ("Orders", Order),
             ("Analytics sessions", AnalyticsSession),
             ("Analytics events", AnalyticsEvent),
         ]

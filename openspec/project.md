@@ -62,25 +62,11 @@ apps/ai_assistant  sanitize · operations · providers (Anthropic/OpenAI-compati
                    document_validation (sanitizes a FULL generated document,
                    strict key checks at every level) · sse
 apps/projects      Project + ProjectRevision API (owner-scoped)
-apps/storefront    Product · Order (gateway-scoped) · PaymentGatewayConfig
-                   (owner-scoped, encrypted credentials) models; ProductViewSet
-                   + PaymentGatewayConfigViewSet (both owner-scoped);
-                   /comprar/<id>/<gateway>/ (+ legacy /comprar/<id>/),
-                   /webhooks/<gateway>/ (8 of them), /gracias/, /config/,
-                   /descargas/<token>/ (all anonymous-facing except /config/);
-                   payments.py (PaymentProvider ABC, one real + one Fake*
-                   per gateway behind GATEWAY_REGISTRY — Stripe/Mercado
-                   Pago/PayPal/Braintree/Wompi/PayU/ePayco/Bold — same
-                   swappable pattern as apps.ai_assistant.providers);
-                   crypto.py (Fernet encryption for stored credentials)
 apps/analytics     Pseudonymous opt-in visitor/session/event models, public
                    consent/collect endpoints, owner-scoped dashboard APIs,
                    heatmap aggregation, admin, and purge_analytics command
 templates/         registration/login · editor/editor.html · editor/home.html ·
                    editor/gallery.html · editor/template_wizard.html ·
-                   storefront/products.html · storefront/payment_config.html ·
-                   storefront/success.html · storefront/checkout_cancel.html ·
-                   storefront/payu_redirect.html
                    analytics/dashboard.html
 static/editor/     editor.css · editor-core.js · editor-ai.js (also owns the
                    shared EditorModals dialog manager, see gotchas) ·
@@ -90,7 +76,6 @@ static/editor/     editor.css · editor-core.js · editor-ai.js (also owns the
                    tailwind.css (compiled, gitignored, `pnpm run build:css`)
 static/shared/     tokens.css (shared cross-page design tokens) ·
                    ai-stream.js (shared AI SSE/reasoning client)
-static/storefront/ products.js (/productos/) · payment-config.js (/config/)
 static/analytics/  public-tracker.js/css · dashboard.js/css
 tests/             pytest + tests/js/ (Node) + tests/e2e/ (Playwright)
 openspec/          this spec set (project.md · specs/ · changes/)
@@ -193,7 +178,7 @@ generated 30,184 classes, and migrations reported no pending changes. Starting
 Django remains the responsibility of `run-local.sh`.
 `mockup.sh` is the local demo-data bootstrap: it migrates, flushes the database
 and referenced media files, then creates deterministic records across auth,
-editor, projects, storefront, and analytics. It refuses non-development
+editor, projects, and analytics. It refuses non-development
 settings unless `MOCKUP_ALLOW_NON_DEBUG=1` is explicitly set. The commented
 `MOCKUP_USERNAME`, `MOCKUP_EMAIL`, and `MOCKUP_PASSWORD` entries in
 `.env.example` optionally override the printed demo credentials; keep
@@ -292,7 +277,7 @@ use the version-matched official Playwright container described in `AGENTS.md`.
   SSE buffering, terminal event collection, and live reasoning filtering stay
   in the shared module. Load it before either consumer.
 - **Cross-page UI tokens live in `static/shared/tokens.css`.** The editor,
-  wizard, galleries, storefront management/result pages, and auth templates
+  wizard, galleries, and auth templates
   link this stylesheet and use its canonical `--app-bg`, `--panel-bg`,
   `--border`, `--text`, `--muted`, `--primary`, `--font-sans`, `--radius`, and
   `--shadow` variables. Do not add another page-level `:root` palette; keep
@@ -319,78 +304,22 @@ use the version-matched official Playwright container described in `AGENTS.md`.
   `AI_PROVIDER=fake uv run pytest` for the deterministic local quality gate;
   live-provider runs are separate model verification and can produce
   non-allowlisted Tailwind classes.
-- **Multi-gateway checkout, per-seller, not a global `PAYMENT_PROVIDER`
-  setting anymore.** The buyer picks the gateway at checkout
-  (`POST /comprar/<id>/<gateway>/`); credentials live in `PaymentGatewayConfig`
-  (owner-scoped like `Product`, one row per seller per gateway, encrypted
-  at rest via `apps/storefront/crypto.py` — Fernet keyed from
-  `DJANGO_SECRET_KEY`, so rotating that key without a migration plan makes
-  every stored credential unreadable) managed at `/config/`. An enabled
-  gateway with no/incomplete credentials silently runs its own `Fake*`
-  provider (`apps/storefront/payments.py`'s `GATEWAY_REGISTRY`) instead of
-  failing — tests must never hit a real gateway API; use the matching
-  `Fake*` class. `STRIPE_SECRET_KEY`/`STRIPE_WEBHOOK_SECRET`/
-  `PAYMENT_PROVIDER` settings no longer exist.
-- `apps/storefront`'s checkout and all 8 gateway webhook views
-  (`/webhooks/<gateway>/`) are the only `@csrf_exempt` views in the project
-  — an anonymous buyer and the gateway itself have no CSRF cookie to
-  present. Do not broaden that exemption elsewhere; each webhook's
-  integrity instead comes from that gateway's own signature verification
-  (`GatewayWebhookView` tries every enabled seller's credentials for that
-  gateway until one verifies — a webhook payload carries no explicit
-  seller identity), and checkout never trusts a client-supplied price
-  (always re-reads `Product.price_cents` from the DB).
-- `Order` (`apps/storefront`) gained a `gateway` field — uniqueness is
-  scoped to `(gateway, gateway_session_id)`, not a single global session id
-  (two gateways could theoretically collide on session-id strings). It's
-  created by the verified webhook for a real gateway — the checkout-
-  redirect view runs before payment is confirmed, so `GET /gracias/` (the
-  success page) must not assume the `Order` already exists; it falls back
-  to a direct `PaymentProvider.retrieve_session` lookup instead of
-  fabricating a download link. **Two narrow exceptions, both verified live
-  bugs before their fixes**: (1) with a `Fake*` provider there is no real
-  gateway server to ever deliver a webhook, so `CheckoutView` calls the
-  shared `_record_order_for_session()` directly right after creating the
-  session (buyer was stuck on "Procesando tu pago…" forever otherwise);
-  (2) when the seller has **zero** gateways enabled at all, `CheckoutView`
-  delivers the product directly and records a real `Order`
-  (`gateway="none"`, `amount_cents=0`, `status=PAID`) rather than 404ing or
-  giving it away untracked. Never take either shortcut for a real
-  configured gateway — real payments still require the actual signed
-  webhook.
-- **`/comprar/<id>/` (no gateway segment) still exists as a legacy URL** —
-  a buy-form `action` baked into a `UserTemplate`'s saved state from before
-  multi-gateway checkout shipped points there, and it's a LITERAL value in
-  stored JSON that a URLconf change never retroactively updates.
-  **Verified** a real already-published page 404'd after the gateway-
-  segment URL shipped; it now falls back to the seller's first enabled
-  gateway (alphabetical) or the zero-gateway free-delivery path above. Any
-  future URL-shape change for a route whose exact string gets saved into
-  content (not just navigated to) needs the same kind of explicit
-  backward-compat path, not just an updated `URLconf`.
-- `CheckoutView`/every gateway webhook view also set
-  `authentication_classes = []` (not just `permission_classes = [AllowAny]`)
-  — DRF's default `SessionAuthentication` runs its OWN CSRF check
-  independent of `@csrf_exempt` whenever it successfully authenticates a
-  request via session cookie. **Verified**: a logged-in visitor (e.g. the
-  product's own owner testing their "Comprar" button) got a 403
-  `CSRF Failed` despite the view being explicitly exempt, until
-  `authentication_classes = []` removed the reason to authenticate the
-  requester at all. The `api`/`anon_api` test fixtures use
-  `force_authenticate`, which bypasses this whole pipeline — regression-
-  testing this class of bug needs a real `client.login()` session with
-  `enforce_csrf_checks=True`.
-- **`stripe.Webhook.construct_event` returns a `StripeObject`, not a plain
-  dict** — no `.get()`, doesn't match `isinstance(x, dict)`.
-  `StripePaymentProvider.parse_webhook_event` normalizes via
-  `event.to_dict()` before returning. This was a real, previously-latent
-  bug: an `isinstance(dict)` branch silently always took the wrong path for
-  every real (non-fake) Stripe webhook, since only `FakePaymentProvider`
-  had ever been exercised through that code path before this was caught.
-- `GET /t/<slug>/` (public template page) and `GET /descargas/<token>/`
-  (digital download) both 404 identically for "doesn't exist" and
-  "not allowed" — never let either be distinguishable, so neither an
-  unpublished template nor an unpaid order can be enumerated.
+- **maqueta is not a payment processor.** A seller puts their own purchase
+  URL (Hotmart, WhatsApp, Mercado Pago link, whatever) on any button/link
+  via a plain prompt (`static/editor/cta-link.js` +
+  `editor-core.js`'s CTA dblclick handler), which reuses the same generic
+  `setAttribute(node, "href", value)` primitive the inspector's `nodeHref`
+  field already uses. There is no internal Product catalog, checkout,
+  gateway integration, or gated digital download — `apps/storefront` and
+  `apps/hotmart` were both removed wholesale (see
+  `apps/editor/migrations/0013_drop_hotmart_tables.py` and
+  `0014_drop_storefront_tables.py`). Pre-existing published pages with old
+  `data-buy-form`/`/comprar/...` markup are neutralized to a plain,
+  editable `href="#"` link by `0015_clean_legacy_buy_markup.py` — original
+  button text is preserved, only the dead action/href is cleared.
+- `GET /t/<slug>/` (public template page) 404s identically for "doesn't
+  exist" and "not published" — never let either be distinguishable, so an
+  unpublished template can't be enumerated by slug guessing.
 - `AI_MAX_OUTPUT_TOKENS` (default 32000) caps model output tokens. Without it
   set explicitly (or set too low), a full-page wizard generation (lots of
   styles.rules JSON) can get cut off mid-response by the provider's own
