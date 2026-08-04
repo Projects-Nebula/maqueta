@@ -8,6 +8,22 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **Multi-page bundle upload and maqueta-hosted deploy target.** Uploaded
+  site bundles no longer require a top-level `index.html` — any bundle with
+  at least one `.html`/`.htm` file (anywhere in the folder, including
+  subfolders) passes validation, and the seller picks which page serves `/`
+  when none exists at the root (`entrypoint_required` response with
+  candidates; the upload UI pre-scans and prompts before submitting). Adds a
+  second deploy target alongside Vercel: `target=maqueta` serves the bundle
+  directly from `GET /s/<slug>/<path>` on maqueta's own domain, gated by an
+  explicit publish flag so upload never implies public serving. Since that
+  path shares maqueta's origin (unlike Vercel's per-bundle isolated
+  `*.vercel.app` project), seller pages are sandboxed via
+  `Content-Security-Policy: sandbox` (deliberately without
+  `allow-same-origin`) — no cookie/localStorage access, no credentialed
+  calls back into maqueta's API. Also fixes `unpublish_bundle()` calling
+  Vercel for maqueta-only bundles that share a `public_slug` but never had a
+  Vercel project.
 - **Owner-scoped audit log.** `AuditEvent` records `ai_transform`,
   `ai_wizard_generate`, `template_create`, and `template_save` actions
   (owner, target, small metadata blob), surfaced as an "Actividad" panel in

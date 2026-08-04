@@ -449,28 +449,53 @@ use the version-matched official Playwright container described in `AGENTS.md`.
   matches; resist growing it into one. Everything else in `style` is
   dropped and counted in the response's `skipped_attributes`.
 
-- **Site bundle deploy (`apps/vercel/`, `SiteBundle`/`BundleAsset`) is origin
-  isolation, not content sanitization — explicit non-goals, not a gap to
-  "complete" later.** A seller-uploaded HTML+JS bundle is validated
-  (`apps/editor/asset_validation.py`: path traversal, spoofed extensions,
-  decompression bombs, SVG XXE, size caps, missing `index.html`, deny-by-
-  default extension allowlist) and then deployed **verbatim** to a per-bundle
-  isolated `*.vercel.app` project — the uploaded JavaScript itself runs
-  unmodified in the visitor's browser. v1 deliberately does NOT scan bundle
-  content for malware, phishing, or malicious JS *behavior* (e.g. exfiltrating
-  form data, cryptomining, drive-by redirects) — that is a fundamentally
-  different, much harder problem than the structural/format validation above,
-  and out of scope. The sole mitigation is that each bundle gets its own
-  Vercel project/hostname sharing no cookie jar, storage, or session with
-  maqueta or any other seller's bundle, so a malicious bundle can only harm
-  its own visitors on its own origin, never pivot into maqueta or another
-  seller. Custom domains are also postponed for v1 — every deployed bundle
-  is served on `*.vercel.app` only; this is also where the origin-isolation
-  guarantee above lives, so don't scope custom-domain support without
-  re-deriving that guarantee for a shared apex domain. "Manual takedown"
-  (`BundleViewSet.unpublish`, staff or bundle owner) is the only content-level
-  remedy in v1 — it deletes the Vercel project after a bundle is found to be
-  abusive, it does not prevent one from being deployed in the first place.
+- **Site bundle deploy (`apps/vercel/`, `apps/editor/views.py::PublicBundleAssetView`,
+  `SiteBundle`/`BundleAsset`) is origin isolation, not content sanitization —
+  explicit non-goals, not a gap to "complete" later.** A seller-uploaded
+  HTML+JS bundle is validated (`apps/editor/asset_validation.py`: path
+  traversal, spoofed extensions, decompression bombs, SVG XXE, size caps,
+  deny-by-default extension allowlist, at least one `.html`/`.htm` file
+  anywhere in the tree) and then deployed **verbatim** — the uploaded
+  JavaScript itself runs unmodified in the visitor's browser, on whichever
+  target the seller picks. v1 deliberately does NOT scan bundle content for
+  malware, phishing, or malicious JS *behavior* (e.g. exfiltrating form data,
+  cryptomining, drive-by redirects) — that is a fundamentally different, much
+  harder problem than the structural/format validation above, and out of
+  scope. There are now **two deploy targets with two different isolation
+  mechanisms**, chosen per-bundle (`SiteBundle.entrypoint_path` +
+  `is_hosted_locally`, `BundleViewSet.deploy`'s `target` param):
+  - **Vercel** (`target=vercel`, requires `entrypoint_path == "index.html"`):
+    each bundle gets its own isolated `*.vercel.app` project/hostname sharing
+    no cookie jar, storage, or session with maqueta or any other seller's
+    bundle — a malicious bundle can only harm its own visitors on its own
+    origin. Custom domains are postponed for v1 — every Vercel-deployed
+    bundle is served on `*.vercel.app` only; this is also where the
+    origin-isolation guarantee lives, so don't scope custom-domain support
+    without re-deriving that guarantee for a shared apex domain.
+  - **Maqueta-hosted** (`target=maqueta`, any entrypoint): served from
+    `GET /s/<slug>/<path>` on maqueta's **own** domain instead of a separate
+    origin, so the Vercel-style per-project isolation does not apply. The
+    substitute mitigation is `Content-Security-Policy: sandbox ...`
+    **without `allow-same-origin`** on every response from that view — this
+    forces the seller's document into a browser-enforced opaque origin: no
+    `document.cookie`/`localStorage` access, no credentialed same-site
+    requests back to `/api/...`, no service worker registration. The view
+    also never touches `request.session` and strips cookies from its
+    response. Do not add `allow-same-origin` to that header; it reopens
+    ambient-session-theft from maqueta's own logged-in visitors browsing a
+    seller's page. Accepted tradeoff: seller pages that need
+    `localStorage`/cookies/service workers don't work maqueta-hosted — only
+    Vercel.
+  - Uploading a bundle never makes either target servable on its own —
+    `is_hosted_locally` (maqueta) and having a `VercelDeployment` row
+    (Vercel) both require an explicit `deploy` call. A bundle may be hosted
+    on both, either, or neither at once.
+  "Manual takedown" (`BundleViewSet.unpublish` → `apps.vercel.services.
+  unpublish_bundle`, staff or bundle owner) is the only content-level remedy
+  in v1 — it tears down **both** targets at once (deletes the Vercel project
+  only if one actually exists, via `bundle.deployments.exists()`, and clears
+  `is_hosted_locally` unconditionally) after a bundle is found to be abusive;
+  it does not prevent one from being deployed in the first place.
 
 ## Related durable context
 
