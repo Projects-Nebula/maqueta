@@ -497,6 +497,52 @@ use the version-matched official Playwright container described in `AGENTS.md`.
   `is_hosted_locally` unconditionally) after a bundle is found to be abusive;
   it does not prevent one from being deployed in the first place.
 
+- **New Vercel projects inherit the team's default deployment protection —
+  `RealVercelClient.create_deployment()` must always PATCH it off, or every
+  seller's page 302-redirects buyers to a Vercel SSO login instead of
+  showing the page.** Verified live against a real team: a freshly created
+  project came back `ssoProtection: {"deploymentType":
+  "all_except_custom_domains"}`, and this app never uses custom domains (see
+  above — every Vercel-hosted bundle is `*.vercel.app` only), so that default
+  silently made every deploy private. `create_deployment()` now calls
+  `PATCH /v9/projects/<name>` with `{"ssoProtection": null}` right after the
+  deployment succeeds — a failure there raises `VercelClientError` same as
+  the deployment call itself (an "invisible" deploy isn't a successful one
+  for this feature's purpose). If a future Vercel API change or team-level
+  policy makes this PATCH insufficient, re-verify live with a real deploy +
+  anonymous `curl`, not just a passing unit test — this exact bug shipped
+  with 28/28 unit tests green because none of them made a real HTTP request.
+
+- **Tests must never depend on whether `VERCEL_TOKEN` happens to be set in a
+  dev's local `.env`.** `build_vercel_client()` (`apps/vercel/client.py`)
+  picks `RealVercelClient` whenever `VERCEL_TOKEN` is non-empty — with a real
+  token configured locally (needed for the app's actual Vercel deploy
+  feature to work), every un-mocked `deploy_bundle()` call in the test suite
+  silently hit the live Vercel API and created a real, never-cleaned-up
+  project. 147 accumulated on one dev account before `tests/conftest.py`
+  gained an autouse `_fake_vercel_client_by_default` fixture that forces
+  `FakeVercelClient` for every test; a test needing custom fake behavior
+  (failure injection, capturing calls) overrides it with its own
+  `monkeypatch.setattr("apps.vercel.services.build_vercel_client", ...)`,
+  which wins. Never write a new Vercel-touching test that skips this by
+  calling the real client directly — the autouse fixture only protects tests
+  that go through `build_vercel_client()`.
+
+- **`BundleViewSet.parser_classes` must list every parser its actions
+  actually receive — it's viewset-wide in DRF, not per-action.** `create()`
+  needs `MultiPartParser` for the file upload; `deploy()` takes a JSON body
+  (`{"target": "vercel" | "maqueta"}`) from `bundle-upload.js`'s real
+  `fetch(..., {headers: {"Content-Type": "application/json"}})` call. With
+  only `MultiPartParser` listed, every real browser deploy 415'd — DRF's
+  `APIClient.post(url, data={...})` test helper defaults to multipart
+  encoding too, so the existing unit test passed despite the bug; it never
+  exercised the JSON path the real frontend uses. `parser_classes` now lists
+  both `MultiPartParser` and `JSONParser`. If a `BundleViewSet` action ever
+  needs a body shape neither covers, add the right parser here rather than
+  changing the frontend to match — and add a test with `format="json"`
+  (`APIClient`'s literal JSON encoding), not the default multipart `data=`
+  shorthand, to actually catch a regression.
+
 ## Related durable context
 
 - `CHANGELOG.md` — what shipped, by version.

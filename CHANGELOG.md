@@ -74,6 +74,26 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **Vercel-hosted bundle pages were invisible to real visitors.** New Vercel
+  projects inherit the team's default deployment protection
+  (`ssoProtection`), so every bundle deployed via `target=vercel` 302-redirected
+  anonymous buyers to a Vercel SSO login instead of showing the page —
+  caught only by a live deploy + anonymous `curl`, not by any unit test.
+  `RealVercelClient.create_deployment()` now explicitly disables it
+  (`PATCH /v9/projects/<name>` with `ssoProtection: null`) right after every
+  deploy.
+- **Vercel deploy tests silently hit the real Vercel API.** `build_vercel_client()`
+  picks the real client whenever a dev's local `.env` has a `VERCEL_TOKEN`
+  configured (needed for the feature to actually work) — every un-mocked
+  test created a real, never-cleaned-up Vercel project (147 accumulated on
+  one dev account). `tests/conftest.py` now has an autouse fixture forcing
+  `FakeVercelClient` for every test regardless of local env.
+- **`BundleViewSet.deploy` 415'd on every real browser call.**
+  `parser_classes = [MultiPartParser]` is viewset-wide, so it also gated
+  `deploy()`, which takes a JSON body from `bundle-upload.js`'s real
+  `fetch(...)` call — the existing unit test passed anyway because DRF's
+  test client defaults to multipart encoding, never exercising the JSON
+  path. Added `JSONParser` alongside `MultiPartParser`.
 - **CSS-value style-tag breakout.** `check_css_declaration`/
   `check_css_variable` now also reject `< > { }` in a CSS value — a crafted
   value could previously break out of the server-rendered inline `<style>`
