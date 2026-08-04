@@ -140,11 +140,35 @@ class RealVercelClient(VercelClient):
                 timeout=self._timeout,
             )
             response.raise_for_status()
-            return self._deployment_from_payload(response.json())
+            deployment = self._deployment_from_payload(response.json())
         except httpx.HTTPError as exc:
             raise VercelClientError(f"vercel deployment creation failed: {exc}") from exc
         except (KeyError, ValueError, TypeError) as exc:
             raise VercelClientError("vercel deployment response had an unexpected shape") from exc
+        self._disable_deployment_protection(project_name)
+        return deployment
+
+    def _disable_deployment_protection(self, project_name: str) -> None:
+        """New projects inherit the team's default SSO/"Vercel
+        Authentication" deployment protection (verified live: a fresh
+        project came back `ssoProtection: {"deploymentType":
+        "all_except_custom_domains"}`, and every deploy this app makes lands
+        on the default *.vercel.app domain, never a custom one — so every
+        seller's page was 302-redirecting anonymous buyers to a Vercel SSO
+        login instead of showing the page). Explicitly clearing it on every
+        deploy is idempotent and required for the deploy target's whole
+        purpose: a public page buyers can actually see."""
+        try:
+            response = httpx.patch(
+                f"{self._api_base_url}/v9/projects/{project_name}",
+                params=self._team_params(),
+                json={"ssoProtection": None},
+                headers=self._headers(),
+                timeout=self._timeout,
+            )
+            response.raise_for_status()
+        except httpx.HTTPError as exc:
+            raise VercelClientError(f"failed to disable deployment protection: {exc}") from exc
 
     def get_deployment(self, deployment_id: str) -> Deployment:
         try:

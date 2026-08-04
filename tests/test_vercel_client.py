@@ -104,6 +104,23 @@ class TestRealVercelClientCreateDeployment:
             team_id=team_id,
         )
 
+    @staticmethod
+    def _fake_patch_ok(captured=None):
+        """New projects inherit the team's default SSO deployment
+        protection - create_deployment() always PATCHes it off afterward
+        (see RealVercelClient._disable_deployment_protection). A default
+        success stub for tests that aren't specifically asserting on it."""
+
+        def _fake_patch(url, *, params, json, headers, timeout):
+            if captured is not None:
+                captured["patch_url"] = url
+                captured["patch_params"] = params
+                captured["patch_json"] = json
+            request = httpx.Request("PATCH", url)
+            return httpx.Response(200, json={}, request=request)
+
+        return _fake_patch
+
     def test_create_deployment_posts_expected_shape(self, monkeypatch):
         """Matches the verified live Vercel response shape: POST
         /v13/deployments auto-creates the named project — no separate
@@ -130,6 +147,7 @@ class TestRealVercelClientCreateDeployment:
             )
 
         monkeypatch.setattr("httpx.post", _fake_post)
+        monkeypatch.setattr("httpx.patch", self._fake_patch_ok(captured))
 
         deployment = self._client().create_deployment(
             project_name="mq-my-bundle",
@@ -148,6 +166,71 @@ class TestRealVercelClientCreateDeployment:
         assert deployment.project_id == "prj_abc"
         assert deployment.aliases == ["mq-my-bundle-account.vercel.app"]
         assert deployment.ready_state == "INITIALIZING"
+
+    def test_create_deployment_disables_deployment_protection(self, monkeypatch):
+        """Regression test: verified live against a real Vercel team that a
+        freshly-created project comes back with ssoProtection set to
+        {"deploymentType": "all_except_custom_domains"} - since every
+        bundle this app deploys lands on the default *.vercel.app domain
+        (never a custom one), every seller's page 302-redirected anonymous
+        buyers to a Vercel SSO login instead of showing the page, until
+        explicitly cleared via PATCH /v9/projects/{name}."""
+
+        def _fake_post(url, *, params, json, headers, timeout):
+            request = httpx.Request("POST", url)
+            return httpx.Response(
+                200,
+                json={
+                    "id": "dpl_123",
+                    "url": "mq-my-bundle-abc123.vercel.app",
+                    "alias": ["mq-my-bundle-account.vercel.app"],
+                    "readyState": "INITIALIZING",
+                    "projectId": "prj_abc",
+                },
+                request=request,
+            )
+
+        captured = {}
+        monkeypatch.setattr("httpx.post", _fake_post)
+        monkeypatch.setattr("httpx.patch", self._fake_patch_ok(captured))
+
+        self._client(team_id="team_123").create_deployment(
+            project_name="mq-my-bundle",
+            files=[DeploymentFile(path="index.html", data=b"<html></html>")],
+        )
+
+        assert captured["patch_url"] == "https://api.example.com/v9/projects/mq-my-bundle"
+        assert captured["patch_params"] == {"teamId": "team_123"}
+        assert captured["patch_json"] == {"ssoProtection": None}
+
+    def test_create_deployment_raises_if_disabling_protection_fails(self, monkeypatch):
+        def _fake_post(url, *, params, json, headers, timeout):
+            request = httpx.Request("POST", url)
+            return httpx.Response(
+                200,
+                json={
+                    "id": "dpl_123",
+                    "url": "x.vercel.app",
+                    "alias": ["x.vercel.app"],
+                    "readyState": "INITIALIZING",
+                    "projectId": "prj_abc",
+                },
+                request=request,
+            )
+
+        def _fake_patch(url, *, params, json, headers, timeout):
+            request = httpx.Request("PATCH", url)
+            response = httpx.Response(500, json={"error": "boom"}, request=request)
+            raise httpx.HTTPStatusError("boom", request=request, response=response)
+
+        monkeypatch.setattr("httpx.post", _fake_post)
+        monkeypatch.setattr("httpx.patch", _fake_patch)
+
+        with pytest.raises(VercelClientError):
+            self._client().create_deployment(
+                project_name="mq-my-bundle",
+                files=[DeploymentFile(path="index.html", data=b"x")],
+            )
 
     def test_create_deployment_sends_team_id_only_when_configured(self, monkeypatch):
         captured = {}
@@ -168,6 +251,7 @@ class TestRealVercelClientCreateDeployment:
             )
 
         monkeypatch.setattr("httpx.post", _fake_post)
+        monkeypatch.setattr("httpx.patch", self._fake_patch_ok())
 
         self._client(team_id="team_123").create_deployment(
             project_name="mq-my-bundle",
