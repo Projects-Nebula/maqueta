@@ -193,6 +193,11 @@ class SiteBundle(models.Model):
     # deployed bundle can't cross (see apps/vercel/client.py). Set by the
     # deploy flow (PR3), not at ingestion time.
     public_slug = models.SlugField(max_length=140, unique=True, null=True, blank=True)
+    # Manual-takedown flag (design: "takedown = manual admin-only unpublish",
+    # mirrors UserTemplate's publish/unpublish flag-flip pattern). An
+    # inactive bundle has had its Vercel project deleted by an admin — see
+    # apps.vercel.services.unpublish_bundle().
+    is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -201,6 +206,10 @@ class SiteBundle(models.Model):
 
     def __str__(self):
         return self.name
+
+    def deactivate(self):
+        self.is_active = False
+        self.save(update_fields=["is_active", "updated_at"])
 
 
 class BundleAsset(models.Model):

@@ -4,12 +4,13 @@ from django.contrib.auth.decorators import login_required
 from django.core.files.base import ContentFile
 from django.db.models import Max
 from django.http import Http404, HttpResponse
-from django.shortcuts import render
+from django.shortcuts import get_object_or_404, render
 from django.utils.decorators import method_decorator
 from django.views.decorators.cache import never_cache
 from django.views.decorators.csrf import ensure_csrf_cookie
 from rest_framework import generics, status, viewsets
 from rest_framework.decorators import action
+from rest_framework.exceptions import PermissionDenied
 from rest_framework.parsers import MultiPartParser
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
@@ -18,7 +19,7 @@ from rest_framework.views import APIView
 
 from apps.projects.models import Project
 from apps.vercel.client import VercelClientError
-from apps.vercel.services import deploy_bundle
+from apps.vercel.services import deploy_bundle, unpublish_bundle
 
 from .asset_validation import BundleFile, BundleValidationError, validate_bundle
 from .image_processing import ImageProcessingError, process_upload
@@ -411,3 +412,17 @@ class BundleViewSet(viewsets.ModelViewSet):
             {"error": "conversion_unavailable", "detail": "not implemented yet"},
             status=status.HTTP_501_NOT_IMPLEMENTED,
         )
+
+    @action(detail=True, methods=["post"])
+    def unpublish(self, request, pk=None):
+        """Manual takedown — allowed for the bundle's owner or staff.
+        Looked up directly by pk (not via `get_queryset()`, which is
+        owner-scoped): staff taking a bundle down does not own it."""
+        bundle = get_object_or_404(SiteBundle, pk=pk)
+        if bundle.owner != request.user and not request.user.is_staff:
+            raise PermissionDenied()
+        try:
+            unpublish_bundle(bundle)
+        except VercelClientError:
+            return Response({"error": "unpublish_failed"}, status=502)
+        return Response(SiteBundleSerializer(bundle).data)

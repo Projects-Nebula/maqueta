@@ -1,5 +1,8 @@
 from django.contrib import admin
 
+from apps.vercel.client import VercelClientError
+from apps.vercel.services import unpublish_bundle
+
 from .models import (
     AuditEvent,
     BundleAsset,
@@ -50,6 +53,28 @@ class BundleAssetInline(admin.TabularInline):
 
 @admin.register(SiteBundle)
 class SiteBundleAdmin(admin.ModelAdmin):
-    list_display = ["name", "owner", "public_slug", "created_at"]
+    list_display = ["name", "owner", "public_slug", "is_active", "created_at"]
     search_fields = ["name", "owner__username", "public_slug"]
     inlines = [BundleAssetInline]
+    actions = ["unpublish_selected"]
+
+    @admin.action(description="Unpublish selected bundles (manual takedown)")
+    def unpublish_selected(self, request, queryset):
+        # Django admin actions are already staff-only by construction (the
+        # admin site itself gates access). BundleViewSet.unpublish exposes
+        # the same manual-takedown path over the API, but there it allows
+        # the bundle owner too (owner-or-staff), not just staff.
+        succeeded = 0
+        for bundle in queryset:
+            try:
+                unpublish_bundle(bundle)
+            except VercelClientError:
+                self.message_user(
+                    request,
+                    f"Failed to unpublish '{bundle.name}': Vercel deletion failed.",
+                    level="ERROR",
+                )
+                continue
+            succeeded += 1
+        if succeeded:
+            self.message_user(request, f"Unpublished {succeeded} bundle(s).")
