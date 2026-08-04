@@ -399,3 +399,15 @@ class BundleViewSet(viewsets.ModelViewSet):
             status=status.HTTP_201_CREATED,
         )
 
+    @action(detail=True, methods=["post"])
+    def convert(self, request, pk=None):
+        """ "Editar antes de publicar" — hand-off to site-bundle-import's
+        node converter. Not built in this change (explicit non-goal); this
+        stub exists so the two-action UI always gets a clear, non-silent
+        response instead of a 404 for the second action.
+        """
+        self.get_object()  # 404s for a nonexistent/non-owned bundle first
+        return Response(
+            {"error": "conversion_unavailable", "detail": "not implemented yet"},
+            status=status.HTTP_501_NOT_IMPLEMENTED,
+        )

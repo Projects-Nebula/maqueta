@@ -27,6 +27,7 @@
         <button class="btn" id="redoButton" type="button" title="Rehacer (Ctrl/Cmd + Shift + Z)" aria-label="Rehacer" disabled>↷ <span class="btn-label">Rehacer</span></button>
         <button class="btn" id="importButton" type="button" aria-label="Importar JSON">↥ <span class="btn-label">Importar JSON</span></button>
         <button class="btn" id="htmlImportButton" type="button" aria-controls="htmlImportModal" aria-expanded="false">✂ <span class="btn-label">Pegar HTML</span></button>
+        <button class="btn" id="bundleUploadButton" type="button" aria-controls="bundleUploadModal" aria-expanded="false">📁 <span class="btn-label">Subir sitio</span></button>
         <button class="btn" id="copyButton" type="button" aria-label="Copiar JSON">⧉ <span class="btn-label">Copiar JSON</span></button>
         <button class="btn success" id="saveTemplateButton" type="button" aria-controls="saveTemplateModal" aria-expanded="false">☆ <span class="btn-label">Guardar</span></button>
         <button class="btn success hidden" id="saveTemplatePublishBtn" type="button">Publicar</button>
@@ -289,6 +290,31 @@
         <button class="btn success" id="htmlImportConfirmBtn" type="button">Importar</button>
       </section>
 
+      <section class="panel-modal ai-save-modal hidden" id="bundleUploadModal" role="dialog" aria-modal="true" aria-labelledby="bundleUploadModalTitle" aria-describedby="bundleUploadModalHelp" aria-hidden="true">
+        <button id="bundleUploadModalClose" class="editor-modal-close" type="button" aria-label="Cerrar">×</button>
+        <h2 class="panel-title" id="bundleUploadModalTitle">Subir sitio</h2>
+        <p class="panel-help" id="bundleUploadModalHelp">Subí una carpeta con tu sitio (HTML + assets tal como están) para publicarla tal cual o editarla antes.</p>
+
+        <div id="bundleUploadStepSelect">
+          <label class="field">
+            <span>Nombre del sitio</span>
+            <input class="control" id="bundleUploadNameInput" type="text" placeholder="Mi sitio">
+          </label>
+          <button class="btn" id="bundleUploadBrowseBtn" type="button">Elegir carpeta…</button>
+          <input class="hidden" id="bundleUploadInput" type="file" webkitdirectory directory multiple>
+          <p class="panel-help" id="bundleUploadStatus"></p>
+        </div>
+
+        <div id="bundleUploadStepResult" class="hidden">
+          <p class="panel-help">Sitio subido. ¿Qué querés hacer?</p>
+          <div class="inline-actions">
+            <button class="btn success" id="bundleUploadDeployBtn" type="button">Publicar tal cual</button>
+            <button class="btn" id="bundleUploadConvertBtn" type="button">Editar antes de publicar</button>
+          </div>
+          <p class="panel-help" id="bundleUploadResultMessage"></p>
+        </div>
+      </section>
+
       <section class="panel-modal ai-save-modal hidden" id="saveTemplateModal" role="dialog" aria-modal="true" aria-labelledby="saveTemplateModalTitle" aria-describedby="saveTemplateModalHelp" aria-hidden="true">
         <button id="saveTemplateModalClose" class="editor-modal-close" type="button" aria-label="Cerrar">×</button>
         <h2 class="panel-title" id="saveTemplateModalTitle">Guardar template</h2>
@@ -379,6 +405,7 @@
   <script src="{% static 'editor/editor-ai.js' %}"></script>
   <script src="{% static 'editor/save-template.js' %}"></script>
   <script src="{% static 'editor/html-import.js' %}"></script>
+  <script src="{% static 'editor/bundle-upload.js' %}"></script>
   <script src="{% static 'editor/command-palette.js' %}"></script>
   <script src="{% static 'editor/autosave.js' %}"></script>
 
