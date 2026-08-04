@@ -16,3 +16,4 @@ media/
 .codegraph/
 static/editor/tailwind.css
 static/editor/.tailwind-safelist.txt
+example/
