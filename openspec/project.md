@@ -520,6 +520,29 @@ use the version-matched official Playwright container described in `AGENTS.md`.
   matches; resist growing it into one. Everything else in `style` is
   dropped and counted in the response's `skipped_attributes`.
 
+- **Site bundle deploy (`apps/vercel/`, `SiteBundle`/`BundleAsset`) is origin
+  isolation, not content sanitization — explicit non-goals, not a gap to
+  "complete" later.** A seller-uploaded HTML+JS bundle is validated
+  (`apps/editor/asset_validation.py`: path traversal, spoofed extensions,
+  decompression bombs, SVG XXE, size caps, missing `index.html`, deny-by-
+  default extension allowlist) and then deployed **verbatim** to a per-bundle
+  isolated `*.vercel.app` project — the uploaded JavaScript itself runs
+  unmodified in the visitor's browser. v1 deliberately does NOT scan bundle
+  content for malware, phishing, or malicious JS *behavior* (e.g. exfiltrating
+  form data, cryptomining, drive-by redirects) — that is a fundamentally
+  different, much harder problem than the structural/format validation above,
+  and out of scope. The sole mitigation is that each bundle gets its own
+  Vercel project/hostname sharing no cookie jar, storage, or session with
+  maqueta or any other seller's bundle, so a malicious bundle can only harm
+  its own visitors on its own origin, never pivot into maqueta or another
+  seller. Custom domains are also postponed for v1 — every deployed bundle
+  is served on `*.vercel.app` only; this is also where the origin-isolation
+  guarantee above lives, so don't scope custom-domain support without
+  re-deriving that guarantee for a shared apex domain. "Manual takedown"
+  (`BundleViewSet.unpublish`, staff or bundle owner) is the only content-level
+  remedy in v1 — it deletes the Vercel project after a bundle is found to be
+  abusive, it does not prevent one from being deployed in the first place.
+
 ## Related durable context
 
 - `CHANGELOG.md` — what shipped, by version.
