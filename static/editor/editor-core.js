@@ -2057,17 +2057,9 @@ ${body}
               openImagePickerModal(path);
               return;
             }
-            const buyForm = editable.closest("[data-buy-form]");
-            if (buyForm) {
-              const buyFormPath = parsePreviewPath(buyForm.getAttribute("data-vjpb-path"));
-              if (buyFormPath) {
-                openPaymentLinkModal(buyFormPath);
-                return;
-              }
-            }
             const tag = editable.tagName.toLowerCase();
             if (tag === "button" || tag === "a") {
-              openPaymentLinkModal(path);
+              openCtaLinkPrompt(path);
             }
           },
           true
@@ -3548,97 +3540,26 @@ ${body}
         });
       });
 
-      // --- Product cards (FEATURE.md) --------------------------------------
-      // "Insertar producto" asks the AI to design and insert the card (see
-      // editor-ai.js's EditorAI.requestInstruction) instead of pushing a
-      // hardcoded node — the server feeds the model the real
-      // id/name/price/image for this owner's active products
-      // (available_products in EditorContext) so it never invents one.
-      const productSelect = document.getElementById("productPresetSelect");
-      const insertProductButton = document.getElementById("insertProductButton");
-      let loadedProducts = [];
-
-      if (productSelect && insertProductButton) {
-        fetch("/api/products/", { credentials: "same-origin" })
-          .then(response => (response.ok ? response.json() : []))
-          .then(products => {
-            loadedProducts = products.filter(p => p.is_active);
-            productSelect.innerHTML = loadedProducts.length
-              ? loadedProducts.map(p => `<option value="${p.id}">${p.name}</option>`).join("")
-              : '<option value="">Sin productos activos</option>';
-          })
-          .catch(() => {
-            productSelect.innerHTML = '<option value="">No se pudieron cargar los productos</option>';
-          });
-
-        insertProductButton.addEventListener("click", () => {
-          const product = loadedProducts.find(p => String(p.id) === productSelect.value);
-          if (!product) {
-            showToast("Elegí un producto para insertar.");
-            return;
-          }
-          if (!window.EditorAI) {
-            showToast("El asistente de IA no está disponible.");
-            return;
-          }
-          window.EditorAI.requestInstruction(
-            `Agregá una tarjeta de producto bien diseñada para "${product.name}" ` +
-            `(id ${product.id}) con su botón de compra, al final del contenido principal.`
-          );
-        });
-      }
-
-      // --- Double-click shortcuts: link a button to a product, or set an
-      // image's source (saved asset / new upload / URL) --------------------
-      const paymentLinkModal = document.getElementById("paymentLinkModal");
-      const paymentLinkProductSelect = document.getElementById("paymentLinkProductSelect");
-      const paymentLinkConfirmBtn = document.getElementById("paymentLinkConfirmBtn");
-      let paymentLinkTargetPath = null;
-
-      function openPaymentLinkModal(path) {
-        if (!paymentLinkModal || !paymentLinkProductSelect) return;
-        paymentLinkTargetPath = path;
-        paymentLinkProductSelect.innerHTML = loadedProducts.length
-          ? loadedProducts.map(p => `<option value="${p.id}">${p.name}</option>`).join("")
-          : '<option value="">Sin productos activos</option>';
-        if (window.EditorModals) window.EditorModals.open(paymentLinkModal);
-      }
-
-      if (paymentLinkConfirmBtn) {
-        paymentLinkConfirmBtn.addEventListener("click", () => {
-          const product = loadedProducts.find(p => String(p.id) === paymentLinkProductSelect.value);
-          if (!product || !paymentLinkTargetPath) {
-            showToast("Elegí un producto para vincular.");
-            return;
-          }
-          const node = getNode(paymentLinkTargetPath);
-          if (!node) return;
-          if (node.tag === "form") {
-            // Already a buy-form (e.g. an AI-inserted product card) — just retarget it.
-            node.attributes = node.attributes || {};
-            node.attributes["data-buy-form"] = String(product.id);
-            node.attributes.action = "/comprar/" + product.id + "/";
-            node.attributes.method = "post";
-          } else {
-            // A bare <button>/<a> — wrap it in the real buy-form, keeping its
-            // own tag/classes/text as the submit control's look.
-            const info = getParentInfo(paymentLinkTargetPath);
-            if (!info) return;
-            info.children[info.index] = {
-              type: "element",
-              tag: "form",
-              attributes: {
-                "data-buy-form": String(product.id),
-                action: "/comprar/" + product.id + "/",
-                method: "post"
-              },
-              children: [{ ...clone(node), tag: "button", attributes: { ...(node.attributes || {}), type: "submit" } }]
-            };
-          }
-          if (window.EditorModals) window.EditorModals.closeAll();
-          updateAll();
-          showToast("Botón vinculado a " + product.name + ".");
-        });
+      // --- Double-click shortcut: set a button/anchor's purchase URL -------
+      // Sellers paste their own checkout URL (they already own it elsewhere)
+      // instead of picking a product from maqueta's own catalog/gateway. Pure
+      // logic (button->anchor promotion, prompt-result resolution) lives in
+      // cta-link.js so it is testable without a browser; this just wires it
+      // to the SAME setAttribute(node,"href",value) primitive the inspector's
+      // `nodeHref` field uses, matching this project's confirm()-based idiom
+      // for simple native-dialog flows (see resetButton above,
+      // save-template.js's deleteRevision).
+      function openCtaLinkPrompt(path) {
+        const node = getNode(path);
+        if (!node) return;
+        const current = (node.attributes && node.attributes.href) || "";
+        const promptResult = window.prompt("Pegá la URL de compra o destino del botón:", current);
+        const resolved = window.EditorCtaLink.resolvePromptedHref(promptResult);
+        if (resolved.cancelled) return;
+        window.EditorCtaLink.promoteButtonToAnchor(node);
+        setAttribute(node, "href", resolved.value);
+        updateAll();
+        showToast("Enlace actualizado.");
       }
 
       const imagePickerModal = document.getElementById("imagePickerModal");
