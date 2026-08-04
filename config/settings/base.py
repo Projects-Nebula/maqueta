@@ -41,9 +41,6 @@ env = environ.Env(
     EMAIL_USE_TLS=(bool, True),
     EMAIL_HOST_USER=(str, ""),
     EMAIL_HOST_PASSWORD=(str, ""),
-    HOTMART_AUTH_BASE_URL=(str, "https://api-sec-vlc.hotmart.com/security/oauth"),
-    HOTMART_API_BASE_URL=(str, "https://developers.hotmart.com/products/api/v1"),
-    HOTMART_REQUEST_TIMEOUT=(int, 10),
     VERCEL_TOKEN=(str, ""),
     VERCEL_TEAM_ID=(str, ""),
     VERCEL_API_BASE_URL=(str, "https://api.vercel.com"),
@@ -74,7 +71,6 @@ INSTALLED_APPS = [
     "apps.projects",
     "apps.storefront",
     "apps.analytics",
-    "apps.hotmart",
     "apps.vercel",
 ]
 
@@ -159,7 +155,6 @@ REST_FRAMEWORK = {
         "ai_wizard_questions": "10/m",
         "ai_wizard_review": "15/m",
         "ai_wizard_generate": "6/m",
-        "hotmart_landing_generate": "6/m",
         "html_import": "20/m",
         "wizard_upload": "20/m",
         "public_template_view": "60/m",
@@ -212,17 +207,6 @@ DEFAULT_CURRENCY = env("DEFAULT_CURRENCY")
 # visitor cookie is pseudonymous and intentionally separate from auth.session.
 ANALYTICS_RETENTION_DAYS = env("ANALYTICS_RETENTION_DAYS")
 ANALYTICS_COOKIE_MAX_AGE = env("ANALYTICS_COOKIE_MAX_AGE")
-
-# --- Hotmart integration ----------------------------------------------------
-# No platform-level credentials: each seller pastes her own Developer
-# Credentials (client_credentials grant), stored encrypted on
-# HotmartConnection — see apps/hotmart/models.py and views.CredentialsView.
-# Only the shared API/auth base URLs and timeout remain platform-level
-# config. Without a connection's own client id and secret,
-# build_hotmart_client() always returns the fake client.
-HOTMART_AUTH_BASE_URL = env("HOTMART_AUTH_BASE_URL")
-HOTMART_API_BASE_URL = env("HOTMART_API_BASE_URL")
-HOTMART_REQUEST_TIMEOUT = env("HOTMART_REQUEST_TIMEOUT")
 
 # --- Vercel integration ------------------------------------------------------
 # Platform-level credential (NOT per-seller): a single Vercel token owned by

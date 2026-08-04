@@ -41,6 +41,21 @@ this project adheres to [Semantic Versioning](https://semver.org/).
   choke point that creates the `Order` row for both real-webhook and
   fake-provider paths. A delivery failure never blocks the checkout flow.
 
+### Removed
+
+- **Internal cleanup: Hotmart integration.** Removed `apps/hotmart` (credential
+  connection flow, product/offer listing, and the Hotmart-sourced AI-landing
+  entry point) along with its tests, templates, and static assets — no longer
+  a business direction. Only test/dev data existed, so no seller-facing
+  notice or data migration was needed. Existing landings previously created
+  through that flow are untouched: only the `HotmartProductLink` metadata
+  row is gone, the `UserTemplate` itself remains an ordinary, editable
+  landing. Schema teardown ships as an idempotent tombstone migration in
+  `apps.editor` (`0013_drop_hotmart_tables.py`) that drops the two Hotmart
+  tables and purges their `django_migrations` rows. The general AI wizard
+  landing generator at `/wizard/` is unaffected — it never depended on
+  Hotmart.
+
 ### Fixed
 
 - **CSS-value style-tag breakout.** `check_css_declaration`/

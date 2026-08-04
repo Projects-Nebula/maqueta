@@ -1,8 +1,9 @@
-"""Vercel deployment client — mirrors apps/hotmart/client.py's shape:
+"""Vercel deployment client:
 
 ABC + Real (httpx) + Fake (offline stub) + build_vercel_client() factory,
 with base URLs/timeout in settings so endpoint drift is a config fix, not a
-code change. Unlike Hotmart, the Vercel credential is platform-level (a
+code change. Unlike the per-seller gateway credentials in
+`apps/storefront/payments.py`, the Vercel credential is platform-level (a
 single `VERCEL_TOKEN`), not per-seller — see design.md's confirmed decision.
 
 Verified against the real Vercel API with a real token (2026-08-02, live
@@ -185,8 +186,8 @@ class RealVercelClient(VercelClient):
 
 class FakeVercelClient(VercelClient):
     """Offline stand-in used whenever VERCEL_TOKEN is absent — same role as
-    apps.hotmart.client.FakeHotmartClient. Lets the entire test suite (and
-    local dev) run green with zero Vercel credentials. Aliases are
+    the Fake providers in apps/storefront/payments.py. Lets the entire test
+    suite (and local dev) run green with zero Vercel credentials. Aliases are
     deterministic per project name so two calls for the same project (a
     redeploy) return the same stable URL, and two different projects never
     collide."""
@@ -216,8 +217,9 @@ class FakeVercelClient(VercelClient):
 def build_vercel_client() -> VercelClient:
     """settings.VERCEL_TOKEN set (non-empty) -> RealVercelClient, otherwise
     FakeVercelClient. Platform-level, not per-seller — same "no partial
-    config" doctrine as build_hotmart_client(), simplified because there is
-    only one credential to check instead of a client_id/client_secret pair."""
+    config" doctrine as build_payment_provider(), simplified because there
+    is only one credential to check instead of per-gateway credential
+    dicts."""
     token = settings.VERCEL_TOKEN or ""
     if token:
         return RealVercelClient(
