@@ -3,11 +3,16 @@
 Hotmart app ever ran its own migrations in this database. See design.md
 "Migration mechanism — tombstone migration in apps.editor"."""
 
+import copy
 import importlib
+import json
 
 import pytest
+from django.apps import apps as django_apps
 from django.db import connection
 from django.db.migrations.recorder import MigrationRecorder
+
+from apps.editor.models import UserTemplate
 
 MIGRATION_MODULE = "apps.editor.migrations.0013_drop_hotmart_tables"
 HOTMART_TABLES = ("hotmart_hotmartproductlink", "hotmart_hotmartconnection")
@@ -128,3 +133,169 @@ def test_drop_storefront_tables_migration_is_noop_on_fresh_db():
         module.drop_storefront_tables(None, schema_editor)
 
     assert not MigrationRecorder(connection).migration_qs.filter(app="storefront").exists()
+
+
+CLEAN_LEGACY_BUY_MARKUP_MODULE = "apps.editor.migrations.0015_clean_legacy_buy_markup"
+
+
+def _base_state(*children):
+    return {
+        "document": {
+            "body": {"attributes": {}, "children": list(children)},
+            "head": {},
+        },
+        "styles": {"variables": {}, "rules": [], "keyframes": []},
+        "components": {},
+        "assets": {},
+    }
+
+
+def _run_clean_legacy_buy_markup():
+    module = importlib.import_module(CLEAN_LEGACY_BUY_MARKUP_MODULE)
+    module.clean_legacy_buy_markup(django_apps, None)
+
+
+def test_clean_legacy_buy_markup_migrates_a_buy_form_to_a_neutral_div(user):
+    state = _base_state(
+        {
+            "type": "element",
+            "tag": "form",
+            "attributes": {
+                "action": "/comprar/5/stripe/",
+                "method": "post",
+                "data-buy-form": "true",
+                "data-product-id": "5",
+            },
+            "children": [
+                {
+                    "type": "element",
+                    "tag": "button",
+                    "attributes": {"type": "submit", "class": ["btn"]},
+                    "children": [{"type": "text", "value": "Comprar ahora"}],
+                }
+            ],
+        }
+    )
+    template = UserTemplate.objects.create(owner=user, name="Buy form card", state=state)
+
+    _run_clean_legacy_buy_markup()
+
+    template.refresh_from_db()
+    form_node = template.state["document"]["body"]["children"][0]
+    assert form_node["tag"] == "div"
+    assert "action" not in form_node["attributes"]
+    assert "method" not in form_node["attributes"]
+    assert "data-buy-form" not in form_node["attributes"]
+    assert "data-product-id" not in form_node["attributes"]
+
+    button_node = form_node["children"][0]
+    assert button_node["tag"] == "a"
+    assert button_node["attributes"]["href"] == "#"
+    assert "type" not in button_node["attributes"]
+    assert button_node["children"][0] == {"type": "text", "value": "Comprar ahora"}
+
+
+def test_clean_legacy_buy_markup_migrates_a_plain_anchor_buy_button(user):
+    state = _base_state(
+        {
+            "type": "element",
+            "tag": "a",
+            "attributes": {
+                "href": "/comprar/5/stripe/",
+                "data-buy-form": "true",
+                "class": ["btn"],
+            },
+            "children": [{"type": "text", "value": "Comprar"}],
+        }
+    )
+    template = UserTemplate.objects.create(owner=user, name="Anchor buy button", state=state)
+
+    _run_clean_legacy_buy_markup()
+
+    template.refresh_from_db()
+    anchor_node = template.state["document"]["body"]["children"][0]
+    assert anchor_node["tag"] == "a"
+    assert anchor_node["attributes"]["href"] == "#"
+    assert "data-buy-form" not in anchor_node["attributes"]
+    assert anchor_node["children"][0] == {"type": "text", "value": "Comprar"}
+
+
+def test_clean_legacy_buy_markup_leaves_no_comprar_references_anywhere(user):
+    state = _base_state(
+        {
+            "type": "element",
+            "tag": "form",
+            "attributes": {"action": "/comprar/9/paypal/", "data-buy-form": "true"},
+            "children": [
+                {
+                    "type": "element",
+                    "tag": "button",
+                    "attributes": {"type": "submit"},
+                    "children": [{"type": "text", "value": "Pagar con PayPal"}],
+                },
+                {
+                    "type": "element",
+                    "tag": "a",
+                    "attributes": {"href": "/comprar/9/paypal/"},
+                    "children": [{"type": "text", "value": "Ver detalle"}],
+                },
+            ],
+        }
+    )
+    template = UserTemplate.objects.create(owner=user, name="Multi-marker card", state=state)
+
+    _run_clean_legacy_buy_markup()
+
+    template.refresh_from_db()
+    assert "/comprar/" not in json.dumps(template.state)
+    assert "data-buy-form" not in json.dumps(template.state)
+
+
+def test_clean_legacy_buy_markup_is_idempotent(user):
+    state = _base_state(
+        {
+            "type": "element",
+            "tag": "form",
+            "attributes": {"action": "/comprar/5/stripe/", "data-buy-form": "true"},
+            "children": [
+                {
+                    "type": "element",
+                    "tag": "button",
+                    "attributes": {"type": "submit"},
+                    "children": [{"type": "text", "value": "Comprar ahora"}],
+                }
+            ],
+        }
+    )
+    template = UserTemplate.objects.create(owner=user, name="Idempotent card", state=state)
+
+    _run_clean_legacy_buy_markup()
+    template.refresh_from_db()
+    first_pass_state = copy.deepcopy(template.state)
+    first_pass_updated_at = template.updated_at
+
+    _run_clean_legacy_buy_markup()
+    template.refresh_from_db()
+
+    assert template.state == first_pass_state
+    assert template.updated_at == first_pass_updated_at
+
+
+def test_clean_legacy_buy_markup_is_a_noop_on_a_template_without_buy_markup(user):
+    state = _base_state(
+        {
+            "type": "element",
+            "tag": "h1",
+            "attributes": {},
+            "children": [{"type": "text", "value": "Bienvenido"}],
+        }
+    )
+    template = UserTemplate.objects.create(owner=user, name="Clean landing", state=state)
+    original_state = copy.deepcopy(template.state)
+    original_updated_at = template.updated_at
+
+    _run_clean_legacy_buy_markup()
+
+    template.refresh_from_db()
+    assert template.state == original_state
+    assert template.updated_at == original_updated_at
