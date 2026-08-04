@@ -160,6 +160,7 @@ REST_FRAMEWORK = {
         "analytics_collect": "120/m",
         "bundle_upload": "6/m",
         "bundle_deploy": "6/m",
+        "bundle_serve": "120/m",
     },
 }
 

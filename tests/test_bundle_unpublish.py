@@ -5,6 +5,7 @@ from django.contrib.auth import get_user_model
 
 from apps.editor.models import BundleAsset, SiteBundle
 from apps.vercel.client import FakeVercelClient, VercelClientError
+from apps.vercel.models import VercelDeployment
 
 pytestmark = pytest.mark.django_db
 
@@ -17,6 +18,23 @@ def _bundle_with_index(owner, name="my-site"):
         bundle=bundle, path="index.html", content_type="text/html", byte_size=10
     )
     asset.file.save("index.html", io.BytesIO(b"<html></html>"))
+    return bundle
+
+
+def _bundle_deployed_to_vercel(owner, name="my-site", slug="my-site-abc123"):
+    """A bundle that actually has a Vercel deployment row — the guard
+    unpublish_bundle() must call Vercel on is `deployments.exists()`, not
+    merely `public_slug` being set (see design's bug-fix note)."""
+    bundle = _bundle_with_index(owner, name=name)
+    bundle.public_slug = slug
+    bundle.save(update_fields=["public_slug"])
+    VercelDeployment.objects.create(
+        bundle=bundle,
+        project_id=f"prj_{slug}",
+        deployment_id=f"dpl_{slug}",
+        url="https://example.vercel.app",
+        state="READY",
+    )
     return bundle
 
 
@@ -35,9 +53,7 @@ def staff_api(staff_user):
 
 
 def test_admin_can_unpublish_any_bundle(monkeypatch, staff_api, user):
-    bundle = _bundle_with_index(user)
-    bundle.public_slug = "my-site-abc123"
-    bundle.save(update_fields=["public_slug"])
+    bundle = _bundle_deployed_to_vercel(user)
 
     deleted_projects = []
 
@@ -73,6 +89,56 @@ def test_admin_unpublish_of_never_deployed_bundle_skips_vercel_call(monkeypatch,
     bundle.refresh_from_db()
     assert bundle.is_active is False
     assert calls == []
+
+
+def test_unpublish_of_maqueta_only_bundle_skips_vercel_and_clears_flag(monkeypatch, api, user):
+    """Regression test for the bug design.md documents: unpublish_bundle()
+    used to guard its Vercel call on `public_slug` alone, which a
+    maqueta-only publish also sets — this bundle has a public_slug and
+    is_hosted_locally=True but NO Vercel deployment, so unpublish must not
+    call Vercel at all."""
+    bundle = _bundle_with_index(user)
+    bundle.public_slug = "my-site-abc123"
+    bundle.is_hosted_locally = True
+    bundle.save(update_fields=["public_slug", "is_hosted_locally"])
+
+    calls = []
+
+    class _TrackingClient(FakeVercelClient):
+        def delete_project(self, project_name):
+            calls.append(project_name)
+
+    monkeypatch.setattr("apps.vercel.services.build_vercel_client", lambda: _TrackingClient())
+
+    response = api.post(f"{BUNDLES_URL}{bundle.pk}/unpublish/")
+
+    assert response.status_code == 200
+    bundle.refresh_from_db()
+    assert bundle.is_active is False
+    assert bundle.is_hosted_locally is False
+    assert calls == []
+
+
+def test_unpublish_of_bundle_deployed_to_both_targets_clears_both(monkeypatch, api, user):
+    bundle = _bundle_deployed_to_vercel(user)
+    bundle.is_hosted_locally = True
+    bundle.save(update_fields=["is_hosted_locally"])
+
+    calls = []
+
+    class _TrackingClient(FakeVercelClient):
+        def delete_project(self, project_name):
+            calls.append(project_name)
+
+    monkeypatch.setattr("apps.vercel.services.build_vercel_client", lambda: _TrackingClient())
+
+    response = api.post(f"{BUNDLES_URL}{bundle.pk}/unpublish/")
+
+    assert response.status_code == 200
+    bundle.refresh_from_db()
+    assert bundle.is_active is False
+    assert bundle.is_hosted_locally is False
+    assert calls == ["mq-my-site-abc123"]
 
 
 def test_owner_who_is_not_staff_can_unpublish_own_bundle(monkeypatch, api, user):
@@ -114,9 +180,7 @@ def test_admin_action_unpublishes_selected_bundles(monkeypatch, rf, staff_user, 
 
     from apps.editor.admin import SiteBundleAdmin
 
-    bundle = _bundle_with_index(user)
-    bundle.public_slug = "my-site-def456"
-    bundle.save(update_fields=["public_slug"])
+    bundle = _bundle_deployed_to_vercel(user, name="my-site-2", slug="my-site-def456")
 
     calls = []
 
@@ -144,9 +208,7 @@ class _NoopMessages:
 
 
 def test_unpublish_failure_returns_502_and_leaves_bundle_active(monkeypatch, staff_api, user):
-    bundle = _bundle_with_index(user)
-    bundle.public_slug = "my-site-abc123"
-    bundle.save(update_fields=["public_slug"])
+    bundle = _bundle_deployed_to_vercel(user)
 
     class _FailingClient(FakeVercelClient):
         def delete_project(self, project_name):

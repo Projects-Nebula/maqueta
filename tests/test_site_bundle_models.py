@@ -42,3 +42,19 @@ def test_deleting_bundle_cascades_to_assets(user):
     )
     bundle.delete()
     assert BundleAsset.objects.count() == 0
+
+
+def test_new_bundle_defaults_entrypoint_and_local_hosting(user):
+    bundle = SiteBundle.objects.create(owner=user, name="site")
+    assert bundle.entrypoint_path == "index.html"
+    assert bundle.is_hosted_locally is False
+
+
+def test_ensure_public_slug_is_idempotent(user):
+    bundle = SiteBundle.objects.create(owner=user, name="My Site")
+    first = bundle.ensure_public_slug()
+    assert first
+    second = bundle.ensure_public_slug()
+    assert second == first
+    bundle.refresh_from_db()
+    assert bundle.public_slug == first

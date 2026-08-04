@@ -111,8 +111,9 @@ class BundleValidationError(ValueError):
     used by WizardImageUploadView.
     """
 
-    def __init__(self, code: str, message: str = "") -> None:
+    def __init__(self, code: str, message: str = "", candidates: list[str] | None = None) -> None:
         self.code = code
+        self.candidates = candidates
         super().__init__(message or code)
 
 
@@ -300,7 +301,44 @@ def validate_bundle(files: list[BundleFile]) -> list[ValidatedAsset]:
         data, content_type = _validate_file_content(path, extension, bundle_file.data)
         validated.append(ValidatedAsset(path=path, data=data, content_type=content_type))
 
-    if not any(asset.path == ENTRYPOINT_PATH for asset in validated):
-        raise BundleValidationError("missing_entrypoint", "bundle has no top-level index.html")
+    if not any(_extension(asset.path) in ("html", "htm") for asset in validated):
+        raise BundleValidationError("missing_entrypoint", "bundle has no HTML file")
 
     return validated
+
+
+def resolve_entrypoint(validated: list[ValidatedAsset], requested: str | None) -> str:
+    """Resolve which validated asset serves the bundle's "/" — kept out of
+    validate_bundle() on purpose (see design: entrypoint resolution stays
+    out of validate_bundle) so that function stays pure/single-purpose and
+    this one owns the request-shaped "which HTML file did the seller pick"
+    concern.
+
+    - If `requested` is given, it MUST be one of `validated`'s HTML/HTM
+      paths, or this raises BundleValidationError("invalid_entrypoint").
+    - Otherwise, a top-level "index.html" is auto-selected if present.
+    - Otherwise, raises BundleValidationError("entrypoint_required") with
+      `.candidates` set to the sorted list of the bundle's HTML/HTM paths —
+      the seller must pick one explicitly (a nested index.html, e.g.
+      "pages/index.html", does NOT count as "top-level" and is only offered
+      as a candidate, never auto-selected).
+    """
+    html_paths = sorted(
+        asset.path for asset in validated if _extension(asset.path) in ("html", "htm")
+    )
+
+    if requested:
+        if requested not in html_paths:
+            raise BundleValidationError(
+                "invalid_entrypoint", f"not a validated HTML asset: {requested!r}"
+            )
+        return requested
+
+    if ENTRYPOINT_PATH in html_paths:
+        return ENTRYPOINT_PATH
+
+    raise BundleValidationError(
+        "entrypoint_required",
+        "no top-level index.html — an entrypoint must be chosen",
+        candidates=html_paths,
+    )

@@ -8,10 +8,6 @@ separate "does a project already exist" check is needed.
 
 from __future__ import annotations
 
-import secrets
-
-from django.utils.text import slugify
-
 from apps.editor.models import SiteBundle
 
 from .client import DeploymentFile, VercelClientError, build_vercel_client
@@ -26,15 +22,11 @@ __all__ = [
 
 
 def _ensure_public_slug(bundle: SiteBundle) -> str:
-    """Stable once set, same pattern as `UserTemplate.publish()`: a random
-    suffix avoids collisions between bundles with the same display name.
-    Set lazily on first deploy — ingestion (PR2) does not need a Vercel
-    identity yet, only the deploy flow does."""
-    if not bundle.public_slug:
-        base = slugify(bundle.name)[:100] or "bundle"
-        bundle.public_slug = f"{base}-{secrets.token_hex(3)}"
-        bundle.save(update_fields=["public_slug", "updated_at"])
-    return bundle.public_slug
+    """Delegates to SiteBundle.ensure_public_slug() — the slug is shared by
+    both deploy targets (Vercel and maqueta-hosted), so it lives on the
+    model rather than being duplicated here. Kept as a thin wrapper so this
+    module's other functions don't need to change their call sites."""
+    return bundle.ensure_public_slug()
 
 
 def project_name_for_bundle(bundle: SiteBundle) -> str:
@@ -78,14 +70,21 @@ def unpublish_bundle(bundle: SiteBundle) -> None:
     docstring) and only then flips `is_active` off, mirroring
     `deploy_bundle`'s "external call first, DB write only after success"
     ordering so a failed Vercel call never leaves the bundle in an
-    inconsistent local state.
+    inconsistent local state. Also clears `is_hosted_locally` regardless of
+    Vercel deployment state, taking down the maqueta-hosted path too.
 
     Raises `VercelClientError` on failure — the caller (the `unpublish`
-    view action) maps that to a 502, same as `deploy_bundle`. If the bundle
-    was never deployed (no `public_slug` yet), there is no Vercel project to
-    delete, so the Vercel call is skipped entirely.
+    view action) maps that to a 502, same as `deploy_bundle`.
+
+    Guarded on `bundle.deployments.exists()`, NOT merely on `public_slug`
+    being set (bug fix — see design: unpublish must stop calling Vercel for
+    maqueta-only bundles). A maqueta-only publish sets `public_slug` (it's
+    shared with the Vercel path) without ever creating a Vercel project, so
+    guarding on `public_slug` alone would call Vercel for a project that
+    never existed and 502 on `unpublish`.
     """
-    if bundle.public_slug:
+    if bundle.deployments.exists():
         client = build_vercel_client()
         client.delete_project(project_name_for_bundle(bundle))
     bundle.deactivate()
+    bundle.unpublish_locally()

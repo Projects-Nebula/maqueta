@@ -18,6 +18,7 @@ from apps.editor.asset_validation import (
     BundleFile,
     BundleValidationError,
     process_bundle_image,
+    resolve_entrypoint,
     validate_bundle,
 )
 from apps.editor.image_processing import ImageProcessingError
@@ -221,17 +222,15 @@ def test_caps_checked_before_any_asset_content_is_processed(monkeypatch):
 
 
 # --- 2.6 missing entrypoint -------------------------------------------------
+#
+# validate_bundle() only requires >= 1 HTML file anywhere in the bundle; it
+# no longer requires a literal top-level index.html. Entrypoint *selection*
+# (which HTML file serves as "/") is resolve_entrypoint()'s job, tested
+# separately below.
 
 
-def test_missing_index_html_rejected():
+def test_bundle_with_zero_html_files_rejected():
     files = [BundleFile(path="assets/logo.png", data=_png_bytes())]
-    with pytest.raises(BundleValidationError) as exc_info:
-        validate_bundle(files)
-    assert exc_info.value.code == "missing_entrypoint"
-
-
-def test_nested_index_html_does_not_satisfy_entrypoint():
-    files = [BundleFile(path="pages/index.html", data=b"<html></html>")]
     with pytest.raises(BundleValidationError) as exc_info:
         validate_bundle(files)
     assert exc_info.value.code == "missing_entrypoint"
@@ -241,6 +240,66 @@ def test_empty_bundle_rejected():
     with pytest.raises(BundleValidationError) as exc_info:
         validate_bundle([])
     assert exc_info.value.code == "missing_entrypoint"
+
+
+def test_bundle_without_index_html_but_with_other_html_is_accepted():
+    files = [BundleFile(path="about.html", data=b"<html>about</html>")]
+    assets = validate_bundle(files)
+    assert {a.path for a in assets} == {"about.html"}
+
+
+def test_bundle_with_only_nested_html_is_accepted():
+    files = [BundleFile(path="pages/index.html", data=b"<html></html>")]
+    assets = validate_bundle(files)
+    assert {a.path for a in assets} == {"pages/index.html"}
+
+
+# --- resolve_entrypoint() ---------------------------------------------------
+
+
+def test_resolve_entrypoint_auto_selects_top_level_index_html():
+    assets = validate_bundle(
+        [
+            BundleFile(path="index.html", data=b"<html>home</html>"),
+            BundleFile(path="about.html", data=b"<html>about</html>"),
+        ]
+    )
+    assert resolve_entrypoint(assets, None) == "index.html"
+
+
+def test_resolve_entrypoint_accepts_explicit_valid_entrypoint():
+    assets = validate_bundle([BundleFile(path="home.html", data=b"<html>home</html>")])
+    assert resolve_entrypoint(assets, "home.html") == "home.html"
+
+
+def test_resolve_entrypoint_requires_selection_when_no_top_level_index():
+    assets = validate_bundle(
+        [
+            BundleFile(path="home.html", data=b"<html>home</html>"),
+            BundleFile(path="landing/start.html", data=b"<html>start</html>"),
+        ]
+    )
+    with pytest.raises(BundleValidationError) as exc_info:
+        resolve_entrypoint(assets, None)
+    assert exc_info.value.code == "entrypoint_required"
+    assert exc_info.value.candidates == ["home.html", "landing/start.html"]
+
+
+def test_resolve_entrypoint_nested_index_html_does_not_auto_satisfy():
+    """A nested index.html (e.g. pages/index.html) is NOT a top-level
+    entrypoint — resolve_entrypoint must not auto-select it."""
+    assets = validate_bundle([BundleFile(path="pages/index.html", data=b"<html></html>")])
+    with pytest.raises(BundleValidationError) as exc_info:
+        resolve_entrypoint(assets, None)
+    assert exc_info.value.code == "entrypoint_required"
+    assert exc_info.value.candidates == ["pages/index.html"]
+
+
+def test_resolve_entrypoint_rejects_invalid_explicit_entrypoint():
+    assets = validate_bundle([BundleFile(path="home.html", data=b"<html>home</html>")])
+    with pytest.raises(BundleValidationError) as exc_info:
+        resolve_entrypoint(assets, "does-not-exist.html")
+    assert exc_info.value.code == "invalid_entrypoint"
 
 
 # --- 2.7 duplicate / case-colliding paths ----------------------------------

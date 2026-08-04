@@ -68,7 +68,10 @@ def test_upload_is_owner_scoped(api, other_api, user, other_user):
     assert names == ["mine"]
 
 
-def test_upload_rejects_bundle_missing_index_html(api):
+def test_upload_rejects_bundle_with_no_html_files_at_all(api):
+    """validate_bundle() only requires >= 1 HTML file anywhere in the
+    bundle (not a literal top-level index.html) — this must still reject a
+    bundle with zero HTML files."""
     response = api.post(
         BUNDLES_URL,
         data={"name": "My Site", "assets/style.css": _stylesheet()},
@@ -77,6 +80,76 @@ def test_upload_rejects_bundle_missing_index_html(api):
 
     assert response.status_code == 400
     assert response.json()["error"] == "missing_entrypoint"
+    assert SiteBundle.objects.count() == 0
+
+
+def test_upload_auto_selects_top_level_index_html_as_entrypoint(api, user):
+    response = api.post(
+        BUNDLES_URL,
+        data={"name": "My Site", "index.html": _html()},
+        format="multipart",
+    )
+
+    assert response.status_code == 201
+    bundle = SiteBundle.objects.get(owner=user)
+    assert bundle.entrypoint_path == "index.html"
+
+
+def test_upload_without_index_html_and_no_entrypoint_returns_entrypoint_required(api):
+    response = api.post(
+        BUNDLES_URL,
+        data={
+            "name": "My Site",
+            "home.html": SimpleUploadedFile(
+                "home.html", b"<html>home</html>", content_type="text/html"
+            ),
+            "landing/start.html": SimpleUploadedFile(
+                "start.html", b"<html>start</html>", content_type="text/html"
+            ),
+        },
+        format="multipart",
+    )
+
+    assert response.status_code == 400
+    body = response.json()
+    assert body["error"] == "entrypoint_required"
+    assert sorted(body["candidates"]) == ["home.html", "landing/start.html"]
+    assert SiteBundle.objects.count() == 0
+
+
+def test_upload_with_explicit_entrypoint_succeeds(api, user):
+    response = api.post(
+        BUNDLES_URL,
+        data={
+            "name": "My Site",
+            "home.html": SimpleUploadedFile(
+                "home.html", b"<html>home</html>", content_type="text/html"
+            ),
+            "entrypoint": "home.html",
+        },
+        format="multipart",
+    )
+
+    assert response.status_code == 201
+    bundle = SiteBundle.objects.get(owner=user)
+    assert bundle.entrypoint_path == "home.html"
+
+
+def test_upload_with_invalid_explicit_entrypoint_returns_400(api):
+    response = api.post(
+        BUNDLES_URL,
+        data={
+            "name": "My Site",
+            "home.html": SimpleUploadedFile(
+                "home.html", b"<html>home</html>", content_type="text/html"
+            ),
+            "entrypoint": "does-not-exist.html",
+        },
+        format="multipart",
+    )
+
+    assert response.status_code == 400
+    assert response.json()["error"] == "invalid_entrypoint"
     assert SiteBundle.objects.count() == 0
 
 

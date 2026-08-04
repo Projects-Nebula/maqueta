@@ -53,7 +53,15 @@ class BundleAssetInline(admin.TabularInline):
 
 @admin.register(SiteBundle)
 class SiteBundleAdmin(admin.ModelAdmin):
-    list_display = ["name", "owner", "public_slug", "is_active", "created_at"]
+    list_display = [
+        "name",
+        "owner",
+        "public_slug",
+        "is_active",
+        "entrypoint_path",
+        "is_hosted_locally",
+        "created_at",
+    ]
     search_fields = ["name", "owner__username", "public_slug"]
     inlines = [BundleAssetInline]
     actions = ["unpublish_selected"]

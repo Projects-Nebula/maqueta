@@ -112,7 +112,16 @@ class SiteBundleSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = SiteBundle
-        fields = ["id", "name", "public_slug", "is_active", "created_at", "assets"]
+        fields = [
+            "id",
+            "name",
+            "public_slug",
+            "is_active",
+            "entrypoint_path",
+            "is_hosted_locally",
+            "created_at",
+            "assets",
+        ]
         read_only_fields = fields
 
 

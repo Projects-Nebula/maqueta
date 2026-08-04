@@ -198,6 +198,17 @@ class SiteBundle(models.Model):
     # inactive bundle has had its Vercel project deleted by an admin — see
     # apps.vercel.services.unpublish_bundle().
     is_active = models.BooleanField(default=True)
+    # Bundle-relative path of the validated asset that serves as "/" — see
+    # apps.editor.asset_validation.resolve_entrypoint(). Auto-selected as
+    # "index.html" when one exists at ingestion time; otherwise the seller
+    # must choose one explicitly. Fixed at ingestion, never mutated after.
+    entrypoint_path = models.CharField(max_length=255, default="index.html")
+    # Explicit publish flag for the maqueta-hosted serving path (PublicBundleAssetView,
+    # GET /s/<slug>/...). Defaults to False so uploading a bundle never makes
+    # it publicly servable — only an explicit target=maqueta deploy call
+    # flips this. Independent of the Vercel deploy path (a bundle may be
+    # hosted on both, either, or neither).
+    is_hosted_locally = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -211,15 +222,39 @@ class SiteBundle(models.Model):
         self.is_active = False
         self.save(update_fields=["is_active", "updated_at"])
 
+    def ensure_public_slug(self) -> str:
+        """Stable once set, same pattern as `UserTemplate.publish()`: a
+        random suffix avoids collisions between bundles with the same
+        display name. Shared by both deploy targets (Vercel and
+        maqueta-hosted) so a bundle keeps one identity across both."""
+        if not self.public_slug:
+            import secrets
+
+            from django.utils.text import slugify
+
+            base = slugify(self.name)[:100] or "bundle"
+            self.public_slug = f"{base}-{secrets.token_hex(3)}"
+            self.save(update_fields=["public_slug", "updated_at"])
+        return self.public_slug
+
+    def unpublish_locally(self) -> None:
+        """Manual takedown for the maqueta-hosted path only — independent of
+        the Vercel deploy state (see apps.vercel.services.unpublish_bundle,
+        which calls this regardless of whether a Vercel project exists)."""
+        if self.is_hosted_locally:
+            self.is_hosted_locally = False
+            self.save(update_fields=["is_hosted_locally", "updated_at"])
+
 
 class BundleAsset(models.Model):
     """One validated file within a SiteBundle. ``path`` is the bundle-
     relative lookup key (e.g. "assets/logo.png", "index.html") used to
     resolve references from the HTML — never a filesystem path (see
-    apps.editor.asset_validation's path-hardening doctrine). Exactly one
-    asset per bundle has ``path == "index.html"``, enforced by
+    apps.editor.asset_validation's path-hardening doctrine). At least one
+    asset per bundle is an ``.html``/``.htm`` file, enforced by
     ``validate_bundle()`` before any BundleAsset is ever created, not by a
-    DB constraint here."""
+    DB constraint here; ``SiteBundle.entrypoint_path`` names the one that
+    serves "/" (see ``asset_validation.resolve_entrypoint()``)."""
 
     bundle = models.ForeignKey(SiteBundle, on_delete=models.CASCADE, related_name="assets")
     path = models.CharField(max_length=255)

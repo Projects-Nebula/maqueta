@@ -3,7 +3,7 @@ import uuid
 from django.contrib.auth.decorators import login_required
 from django.core.files.base import ContentFile
 from django.db.models import Max
-from django.http import Http404, HttpResponse
+from django.http import FileResponse, Http404, HttpResponse
 from django.shortcuts import get_object_or_404, render
 from django.utils.decorators import method_decorator
 from django.views.decorators.cache import never_cache
@@ -21,7 +21,7 @@ from apps.projects.models import Project
 from apps.vercel.client import VercelClientError
 from apps.vercel.services import deploy_bundle, unpublish_bundle
 
-from .asset_validation import BundleFile, BundleValidationError, validate_bundle
+from .asset_validation import BundleFile, BundleValidationError, resolve_entrypoint, validate_bundle
 from .image_processing import ImageProcessingError, process_upload
 from .models import (
     AuditEvent,
@@ -162,6 +162,68 @@ class PublicTemplateView(APIView):
             analytics_template_slug=user_template.public_slug,
         )
         return HttpResponse(html)
+
+
+# Sandbox WITHOUT allow-same-origin — the load-bearing control for
+# PublicBundleAssetView (see its docstring and design.md's threat model).
+# Do not add allow-same-origin to this policy.
+_BUNDLE_SANDBOX_CSP = (
+    "sandbox allow-scripts allow-forms allow-popups "
+    "allow-popups-to-escape-sandbox allow-top-navigation-by-user-activation"
+)
+
+
+class PublicBundleAssetView(APIView):
+    """GET /s/<slug>/<path> — serves a maqueta-hosted SiteBundle's assets
+    verbatim from BundleAsset rows, never the filesystem (see
+    apps.editor.asset_validation's path-hardening doctrine — every stored
+    `BundleAsset.path` was already validated at ingestion, so an exact DB
+    lookup on the requested path is the whole traversal defense; there is
+    no filesystem join to escape). Mirrors PublicTemplateView's "same 404
+    for missing vs. unpublished" doctrine: unknown slug, an inactive or
+    never-published bundle, and an unknown path are all indistinguishable
+    404s (see design.md's threat matrix) — no enumeration signal either
+    way.
+
+    SECURITY-CRITICAL: seller HTML/JS is admitted verbatim at ingestion
+    (deploy-as-is doctrine) and now served from maqueta's OWN origin, so
+    every response here sets its own
+    `Content-Security-Policy: sandbox ...` WITHOUT `allow-same-origin`.
+    `sandbox` alone forces the document into an opaque origin: no
+    document.cookie/localStorage access, no same-site cookies attached to
+    its own requests, no readable responses from /api/..., no service
+    worker registration — see design.md's "Same-origin isolation via CSP
+    sandbox" decision for the full threat writeup. Do NOT add
+    allow-same-origin here; that reopens the ambient-session-theft path
+    this header exists to close. The view also never touches
+    `request.session` and strips any cookies from the response, so no
+    maqueta session is ever exposed on this path.
+    """
+
+    permission_classes = [AllowAny]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "bundle_serve"
+
+    @method_decorator(never_cache)
+    def get(self, request, slug, asset_path=""):
+        bundle = SiteBundle.objects.filter(
+            public_slug=slug, is_active=True, is_hosted_locally=True
+        ).first()
+        if not bundle:
+            raise Http404
+
+        resolved_path = asset_path or bundle.entrypoint_path
+        asset = BundleAsset.objects.filter(bundle=bundle, path=resolved_path).first()
+        if not asset:
+            raise Http404
+
+        response = FileResponse(asset.file.open("rb"), content_type=asset.content_type)
+        response["Content-Security-Policy"] = _BUNDLE_SANDBOX_CSP
+        response["X-Content-Type-Options"] = "nosniff"
+        response["Referrer-Policy"] = "no-referrer"
+        response["Cross-Origin-Opener-Policy"] = "same-origin"
+        response.cookies.clear()
+        return response
 
 
 class UserPaletteViewSet(viewsets.ModelViewSet):
@@ -370,7 +432,18 @@ class BundleViewSet(viewsets.ModelViewSet):
         except BundleValidationError as exc:
             return Response({"error": exc.code, "detail": str(exc)}, status=400)
 
-        bundle = SiteBundle.objects.create(owner=request.user, name=name)
+        requested_entrypoint = (request.data.get("entrypoint") or "").strip() or None
+        try:
+            entrypoint_path = resolve_entrypoint(validated_assets, requested_entrypoint)
+        except BundleValidationError as exc:
+            body = {"error": exc.code, "detail": str(exc)}
+            if exc.candidates is not None:
+                body["candidates"] = exc.candidates
+            return Response(body, status=400)
+
+        bundle = SiteBundle.objects.create(
+            owner=request.user, name=name, entrypoint_path=entrypoint_path
+        )
         for asset in validated_assets:
             bundle_asset = BundleAsset(
                 bundle=bundle,
@@ -390,15 +463,39 @@ class BundleViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=["post"])
     def deploy(self, request, pk=None):
+        """ "Publicar tal cual". ``target`` picks the deploy destination —
+        defaults to "vercel" so existing callers (no body) keep their prior
+        behavior unchanged. "maqueta" publishes first-party via
+        PublicBundleAssetView, gated purely by SiteBundle.is_hosted_locally
+        (see design: deploy-target choice gated by explicit publish
+        action) — uploading a bundle never makes it servable on its own.
+        """
         bundle = self.get_object()  # already owner-scoped via get_queryset
-        try:
-            deployment = deploy_bundle(bundle)
-        except VercelClientError:
-            return Response({"error": "deploy_failed"}, status=502)
-        return Response(
-            {"id": deployment.pk, "url": deployment.url, "state": deployment.state},
-            status=status.HTTP_201_CREATED,
-        )
+        target = (request.data.get("target") or "vercel").strip().lower()
+
+        if target == "maqueta":
+            bundle.ensure_public_slug()
+            bundle.is_hosted_locally = True
+            bundle.save(update_fields=["is_hosted_locally", "updated_at"])
+            url = request.build_absolute_uri(f"/s/{bundle.public_slug}/")
+            return Response({"target": "maqueta", "url": url}, status=status.HTTP_201_CREATED)
+
+        if target == "vercel":
+            # Non-index.html entrypoints are only servable via the
+            # maqueta-hosted target in this slice (see design: Vercel
+            # deploy path continues requiring index.html).
+            if bundle.entrypoint_path != "index.html":
+                return Response({"error": "vercel_requires_index"}, status=400)
+            try:
+                deployment = deploy_bundle(bundle)
+            except VercelClientError:
+                return Response({"error": "deploy_failed"}, status=502)
+            return Response(
+                {"id": deployment.pk, "url": deployment.url, "state": deployment.state},
+                status=status.HTTP_201_CREATED,
+            )
+
+        return Response({"error": "invalid_target"}, status=400)
 
     @action(detail=True, methods=["post"])
     def convert(self, request, pk=None):
