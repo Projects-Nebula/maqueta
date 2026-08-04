@@ -288,8 +288,24 @@
           <p class="panel-help" id="bundleUploadStatus"></p>
         </div>
 
+        <div id="bundleUploadStepEntrypoint" class="hidden">
+          <p class="panel-help">Tu carpeta no tiene un "index.html" en la raíz. Elegí qué página se va a mostrar primero.</p>
+          <label class="field">
+            <span>Página de inicio</span>
+            <select class="control" id="bundleUploadEntrypointSelect"></select>
+          </label>
+          <button class="btn success" id="bundleUploadEntrypointConfirmBtn" type="button">Confirmar</button>
+        </div>
+
         <div id="bundleUploadStepResult" class="hidden">
           <p class="panel-help">Sitio subido. ¿Qué querés hacer?</p>
+          <label class="field">
+            <span>Dónde publicar</span>
+            <select class="control" id="bundleUploadTargetSelect">
+              <option value="vercel">Vercel</option>
+              <option value="maqueta">Alojado en maqueta</option>
+            </select>
+          </label>
           <div class="inline-actions">
             <button class="btn success" id="bundleUploadDeployBtn" type="button">Publicar tal cual</button>
             <button class="btn" id="bundleUploadConvertBtn" type="button">Editar antes de publicar</button>

@@ -13,9 +13,12 @@
 const assert = require("node:assert");
 const path = require("node:path");
 
-const { bundleRelativePath, buildBundleFormData } = require(
-  path.join(__dirname, "../../static/editor/bundle-upload.js")
-);
+const {
+  bundleRelativePath,
+  buildBundleFormData,
+  collectHtmlCandidates,
+  hasTopLevelIndexHtml,
+} = require(path.join(__dirname, "../../static/editor/bundle-upload.js"));
 
 function fileAt(relativePath, name) {
   const file = new File(["content"], name || relativePath.split("/").pop());
@@ -63,4 +66,43 @@ function fileAt(relativePath, name) {
 (() => {
   const formData = buildBundleFormData(undefined, [fileAt("site/index.html")]);
   assert.strictEqual(formData.get("name"), "");
+})();
+
+// buildBundleFormData only sends an "entrypoint" field when one is given —
+// the common case (top-level index.html present) never sends it.
+(() => {
+  const withoutEntrypoint = buildBundleFormData("n", [fileAt("site/index.html")]);
+  assert.strictEqual(withoutEntrypoint.get("entrypoint"), null);
+
+  const withEntrypoint = buildBundleFormData(
+    "n",
+    [fileAt("site/home.html")],
+    "home.html"
+  );
+  assert.strictEqual(withEntrypoint.get("entrypoint"), "home.html");
+})();
+
+// hasTopLevelIndexHtml / collectHtmlCandidates: the client pre-scan that
+// decides whether to show the entrypoint picker before ever uploading (see
+// design: "client pre-scan first, server 400 as the authoritative
+// backstop").
+(() => {
+  const withIndex = [fileAt("site/index.html"), fileAt("site/assets/logo.png")];
+  assert.strictEqual(hasTopLevelIndexHtml(withIndex), true);
+
+  const withoutIndex = [
+    fileAt("site/home.html"),
+    fileAt("site/landing/start.html"),
+    fileAt("site/assets/logo.png"),
+  ];
+  assert.strictEqual(hasTopLevelIndexHtml(withoutIndex), false);
+  assert.deepStrictEqual(collectHtmlCandidates(withoutIndex), [
+    "home.html",
+    "landing/start.html",
+  ]);
+
+  // A nested index.html does NOT count as top-level.
+  const nestedOnly = [fileAt("site/pages/index.html")];
+  assert.strictEqual(hasTopLevelIndexHtml(nestedOnly), false);
+  assert.deepStrictEqual(collectHtmlCandidates(nestedOnly), ["pages/index.html"]);
 })();
