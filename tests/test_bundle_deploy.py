@@ -89,6 +89,23 @@ def test_deploy_target_maqueta_publishes_and_sets_hosted_locally(api, user):
     assert body["url"].endswith(f"/s/{bundle.public_slug}/")
 
 
+def test_deploy_accepts_a_real_json_request_body(api, user):
+    """bundle-upload.js sends target as a real `application/json` body
+    (Content-Type: application/json), not multipart - format="json" here
+    reproduces that exactly, unlike the default multipart `data={...}` used
+    above. Regression test: BundleViewSet.parser_classes previously only
+    listed MultiPartParser (viewset-wide, so it also gated this action),
+    which 415'd every real browser deploy call - never caught by the
+    multipart-only test above."""
+    bundle = _bundle_with_index(user)
+
+    response = api.post(
+        f"{BUNDLES_URL}{bundle.pk}/deploy/", data={"target": "maqueta"}, format="json"
+    )
+
+    assert response.status_code == 201
+
+
 def test_deploy_target_vercel_unchanged_for_index_html_bundle(api, user):
     bundle = _bundle_with_index(user)
 

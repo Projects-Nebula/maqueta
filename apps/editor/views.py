@@ -11,7 +11,7 @@ from django.views.decorators.csrf import ensure_csrf_cookie
 from rest_framework import generics, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied
-from rest_framework.parsers import MultiPartParser
+from rest_framework.parsers import JSONParser, MultiPartParser
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
@@ -398,7 +398,9 @@ class BundleViewSet(viewsets.ModelViewSet):
 
     serializer_class = SiteBundleSerializer
     permission_classes = [IsAuthenticated]
-    parser_classes = [MultiPartParser]
+    # MultiPartParser for create() (file upload); JSONParser for deploy()'s
+    # {"target": ...} body — parser_classes is viewset-wide, not per-action.
+    parser_classes = [MultiPartParser, JSONParser]
     http_method_names = ["get", "post", "head", "options"]
 
     # Scoped per-action rather than one throttle_scope for the whole
