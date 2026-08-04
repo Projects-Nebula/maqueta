@@ -1,7 +1,15 @@
 from django.utils.text import slugify
 from rest_framework import serializers
 
-from .models import AuditEvent, UploadedAsset, UserPalette, UserTemplate, UserTemplateRevision
+from .models import (
+    AuditEvent,
+    BundleAsset,
+    SiteBundle,
+    UploadedAsset,
+    UserPalette,
+    UserTemplate,
+    UserTemplateRevision,
+)
 from .palettes import (
     PaletteValidationError,
     validate_palette_metadata,
@@ -86,6 +94,25 @@ class AuditEventSerializer(serializers.ModelSerializer):
     class Meta:
         model = AuditEvent
         fields = ["id", "action", "target_type", "target_id", "metadata", "created_at"]
+        read_only_fields = fields
+
+
+class BundleAssetSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = BundleAsset
+        fields = ["path", "content_type", "byte_size"]
+        read_only_fields = fields
+
+
+class SiteBundleSerializer(serializers.ModelSerializer):
+    # Read-only projection only — a bundle is created via BundleViewSet.create
+    # (multipart, validated through asset_validation.validate_bundle()), never
+    # via a raw serializer-driven POST body.
+    assets = BundleAssetSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = SiteBundle
+        fields = ["id", "name", "public_slug", "is_active", "created_at", "assets"]
         read_only_fields = fields
 
 

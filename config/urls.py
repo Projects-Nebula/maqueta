@@ -22,6 +22,7 @@ urlpatterns = [
     path("api/projects/", include("apps.projects.urls")),
     path("api/user-templates/", include("apps.editor.api_urls")),
     path("api/user-palettes/", include("apps.editor.palette_api_urls")),
+    path("api/editor/bundles/", include("apps.editor.bundle_api_urls")),
     path("api/audit-events/", AuditEventListView.as_view(), name="audit-events"),
     path("", include("apps.storefront.urls")),
     path("api/products/", include("apps.storefront.api_urls")),

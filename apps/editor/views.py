@@ -17,10 +17,15 @@ from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 
 from apps.projects.models import Project
+from apps.vercel.client import VercelClientError
+from apps.vercel.services import deploy_bundle
 
+from .asset_validation import BundleFile, BundleValidationError, validate_bundle
 from .image_processing import ImageProcessingError, process_upload
 from .models import (
     AuditEvent,
+    BundleAsset,
+    SiteBundle,
     Template,
     UploadedAsset,
     UserPalette,
@@ -31,6 +36,7 @@ from .palettes import palette_catalog_for_client
 from .rendering import public_page_html
 from .serializers import (
     AuditEventSerializer,
+    SiteBundleSerializer,
     UploadedAssetSerializer,
     UserPaletteSerializer,
     UserTemplateRevisionSerializer,
@@ -305,3 +311,91 @@ class WizardImageUploadView(APIView):
         asset.file.delete(save=False)
         asset.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class BundleViewSet(viewsets.ModelViewSet):
+    """/api/editor/bundles/ — upload and deploy a "site bundle" (an
+    HTML+assets upload deployed as-is; see design: vercel-bundle-deploy).
+
+    POST (create) ingests a bundle: every multipart field whose key is not
+    ``name`` is treated as one file, keyed by its bundle-relative path (e.g.
+    a field named ``assets/logo.png``) — this is the same contract the
+    folder-picker UI (PR4) will produce by appending each
+    ``file.webkitRelativePath`` as the field name. All ingestion goes
+    through ``asset_validation.validate_bundle()`` once; nothing here
+    re-validates.
+
+    POST .../<id>/deploy/ ("Publicar tal cual") deploys the bundle's
+    already-validated assets verbatim via
+    ``apps.vercel.services.deploy_bundle()``. The other post-upload action,
+    "Editar antes de publicar" (.../convert/), is an explicit 501 stub in
+    this change — node conversion is site-bundle-import's scope (PR3/4 of
+    that change, not built here); see design.md non-goals.
+    """
+
+    serializer_class = SiteBundleSerializer
+    permission_classes = [IsAuthenticated]
+    parser_classes = [MultiPartParser]
+    http_method_names = ["get", "post", "head", "options"]
+
+    # Scoped per-action rather than one throttle_scope for the whole
+    # viewset: upload and deploy are independent rate limits (design.md),
+    # and read-only actions (list/retrieve) are not scope-limited at all.
+    _THROTTLE_SCOPES = {"create": "bundle_upload", "deploy": "bundle_deploy"}
+
+    def get_throttles(self):
+        scope = self._THROTTLE_SCOPES.get(self.action)
+        if not scope:
+            return []
+        self.throttle_scope = scope
+        return [ScopedRateThrottle()]
+
+    def get_queryset(self):
+        return SiteBundle.objects.filter(owner=self.request.user)
+
+    def create(self, request, *args, **kwargs):
+        name = (request.data.get("name") or "").strip()[:120] or "site"
+        bundle_files = [
+            BundleFile(path=path, data=upload.read()) for path, upload in request.FILES.items()
+        ]
+        if not bundle_files:
+            return Response(
+                {"error": "missing_entrypoint", "detail": "no files provided"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            validated_assets = validate_bundle(bundle_files)
+        except BundleValidationError as exc:
+            return Response({"error": exc.code, "detail": str(exc)}, status=400)
+
+        bundle = SiteBundle.objects.create(owner=request.user, name=name)
+        for asset in validated_assets:
+            bundle_asset = BundleAsset(
+                bundle=bundle,
+                path=asset.path,
+                content_type=asset.content_type,
+                byte_size=len(asset.data),
+            )
+            bundle_asset.file.save(
+                asset.path.rsplit("/", 1)[-1], ContentFile(asset.data), save=False
+            )
+            bundle_asset.save()
+
+        return Response(
+            SiteBundleSerializer(bundle).data,
+            status=status.HTTP_201_CREATED,
+        )
+
+    @action(detail=True, methods=["post"])
+    def deploy(self, request, pk=None):
+        bundle = self.get_object()  # already owner-scoped via get_queryset
+        try:
+            deployment = deploy_bundle(bundle)
+        except VercelClientError:
+            return Response({"error": "deploy_failed"}, status=502)
+        return Response(
+            {"id": deployment.pk, "url": deployment.url, "state": deployment.state},
+            status=status.HTTP_201_CREATED,
+        )
+

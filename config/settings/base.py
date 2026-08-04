@@ -167,6 +167,8 @@ REST_FRAMEWORK = {
         "digital_download": "20/m",
         "analytics_consent": "10/m",
         "analytics_collect": "120/m",
+        "bundle_upload": "6/m",
+        "bundle_deploy": "6/m",
     },
 }
 
