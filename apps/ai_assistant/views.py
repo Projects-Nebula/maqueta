@@ -11,8 +11,6 @@ from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 
 from apps.editor.models import AuditEvent
-from apps.storefront.models import PaymentGatewayConfig, Product
-from apps.storefront.views import _gateway_display_names
 
 from .html_import import HtmlImportError, html_to_node
 from .operations import OperationValidationError
@@ -55,24 +53,6 @@ class EditorTransformView(APIView):
             )
         data = serializer.validated_data
 
-        # Populated server-side from the requesting user's own products —
-        # never trust a client-supplied product list, since the model would
-        # otherwise have no way to tell a real id from a made-up one.
-        available_products = [
-            {
-                "id": product.id,
-                "name": product.name,
-                "price_cents": product.price_cents,
-                "image_url": product.image.file.url if product.image else None,
-            }
-            for product in Product.objects.filter(owner=request.user, is_active=True)
-        ]
-        gateway_labels = _gateway_display_names()
-        available_gateways = [
-            {"gateway": config.gateway, "label": gateway_labels.get(config.gateway, config.gateway)}
-            for config in PaymentGatewayConfig.objects.filter(owner=request.user, is_enabled=True)
-        ]
-
         context = EditorContext(
             instruction=data["instruction"],
             selected_path=data.get("selected_path"),
@@ -84,8 +64,6 @@ class EditorTransformView(APIView):
             body_outline=data.get("body_outline", []),
             global_mode=data.get("global_mode", False),
             history=data.get("history", []),
-            available_products=available_products,
-            available_gateways=available_gateways,
         )
         user_id = request.user.pk
         scope = self.throttle_scope

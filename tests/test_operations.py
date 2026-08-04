@@ -91,16 +91,18 @@ def test_product_id_attribute_accepts_digit_string():
     )
 
 
-def test_product_id_attribute_rejects_non_digit():
-    with pytest.raises(OperationValidationError):
-        _ok(
-            {
-                "action": "set_attribute",
-                "path": [0],
-                "attribute": "data-product-id",
-                "value": "42; DROP TABLE products",
-            }
-        )
+def test_product_id_attribute_accepts_non_digit_as_ordinary_data_attr():
+    # data-product-id/data-buy-form no longer get a special digit-only check
+    # now that storefront payments are gone (remove-storefront-payments) —
+    # they fall through as ordinary, unvalidated data-* attributes.
+    assert _ok(
+        {
+            "action": "set_attribute",
+            "path": [0],
+            "attribute": "data-product-id",
+            "value": "42; DROP TABLE products",
+        }
+    )
 
 
 def test_iframe_with_youtube_embed_src_accepted():

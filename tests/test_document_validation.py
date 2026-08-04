@@ -338,7 +338,10 @@ def test_product_card_node_with_valid_id_passes():
     sanitize_document(doc)
 
 
-def test_product_card_node_with_non_digit_id_rejected():
+def test_product_card_node_with_non_digit_id_now_accepted():
+    # data-product-id/data-buy-form no longer get a special digit-only check
+    # now that storefront payments are gone (remove-storefront-payments) —
+    # they fall through as ordinary, unvalidated data-* attributes.
     doc = copy.deepcopy(VALID_DOCUMENT)
     doc["document"]["body"]["children"].append(
         {
@@ -348,5 +351,4 @@ def test_product_card_node_with_non_digit_id_rejected():
             "children": [],
         }
     )
-    with pytest.raises(DocumentValidationError):
-        sanitize_document(doc)
+    sanitize_document(doc)

@@ -363,11 +363,6 @@ def check_attributes(attributes: dict, *, allow_style: bool = False) -> None:
             check_url_value(value)
         if lowered == "class":
             check_class_list(value)
-        if lowered in ("data-product-id", "data-buy-form"):
-            # A product-card reference (FEATURE.md) — just an id, never a
-            # URL/selector, so a strict digits-only check is enough.
-            if not isinstance(value, str) or not value.isdigit():
-                raise SanitizationError(f"{name} must be a digit string")
 
 
 def _normalize_context_node(node, *, _depth=0, _counter=None):

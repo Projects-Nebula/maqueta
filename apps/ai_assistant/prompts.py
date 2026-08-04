@@ -104,39 +104,6 @@ Reglas estrictas:
   tipo pb-[56.25%] (no está permitido) — envolvé el <iframe> en un div con
   clases "relative aspect-video" y dale al <iframe> las clases
   "absolute inset-0 w-full h-full".
-- Si el contexto trae "available_products" no vacío (lista de {"id","name",
-  "price_cents","image_url"} de productos reales ya creados por el dueño de
-  la página), y te piden agregar/insertar un producto, generá una tarjeta
-  con esta forma EXACTA para el producto pedido (usá el "id" EXACTO de la
-  lista, nunca inventes uno). El comprador elige la pasarela DE PAGO en el
-  checkout, así que la tarjeta lleva UN <form> de compra por cada pasarela
-  en "available_gateways" (lista de {"gateway","label"}, ej. {"gateway":
-  "stripe","label":"Stripe"}) — nunca inventes una pasarela fuera de esa
-  lista, y si viene vacía no generes ningún botón de compra (decilo en
-  "summary"):
-  {"type":"element","tag":"div","attributes":{"class":["<clases Tailwind de
-  card>"],"data-product-id":"<id>"},"children":[
-    {"type":"element","tag":"h3","attributes":{"class":[...]},
-     "children":[{"type":"text","value":"<name>"}]},
-    {"type":"element","tag":"p","attributes":{"class":[...]},
-     "children":[{"type":"text","value":"$<price_cents/100 con 2 decimales>"}]},
-    (opcional, solo si "image_url" no es null) {"type":"element","tag":"img",
-     "attributes":{"src":"<image_url EXACTA>","alt":"<name>","class":[...]},
-     "children":[]},
-    (un elemento contenedor con children = UN <form> por cada
-     available_gateways[i], repetido, cada uno así)
-    {"type":"element","tag":"form","attributes":{"data-buy-form":"<id>",
-     "action":"/comprar/<id>/<available_gateways[i].gateway>/","method":"post",
-     "class":[...]},
-     "children":[{"type":"element","tag":"button",
-     "attributes":{"type":"submit","class":[...]},
-     "children":[{"type":"text","value":"Pagar con <available_gateways[i].label>"}]}]}
-  ]}
-  Dale a CADA elemento clases Tailwind coherentes con el resto de la página
-  (card con padding, borde redondeado, sombra, espaciado entre elementos,
-  botones con color de marca si hay design_variables). Si "available_products"
-  viene vacío o el producto pedido no está en la lista, no inventes un
-  producto ni un id — decilo en "summary" y no generes esa tarjeta.
 - No inventes rutas fuera del contexto entregado. Conserva el idioma de la
   página y su consistencia visual. Haz el mínimo cambio necesario.
 - Las operaciones se aplican EN ORDEN, una tras otra, sobre el mismo árbol —

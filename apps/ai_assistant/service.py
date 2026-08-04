@@ -27,8 +27,6 @@ class EditorContext:
     body_outline: list = field(default_factory=list)
     global_mode: bool = False
     history: list = field(default_factory=list)
-    available_products: list = field(default_factory=list)
-    available_gateways: list = field(default_factory=list)
 
     def to_payload(self) -> dict:
         return {
@@ -41,8 +39,6 @@ class EditorContext:
             "page_summary": self.page_summary,
             "body_outline": self.body_outline,
             "global_mode": self.global_mode,
-            "available_products": self.available_products,
-            "available_gateways": self.available_gateways,
         }
 
 
