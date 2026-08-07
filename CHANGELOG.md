@@ -74,6 +74,11 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **Bundle per-file size errors didn't tell the seller the actual limit.**
+  `validate_bundle()` rejected an oversized file with `"{path} exceeds the
+  per-file size cap"` — no number, so the seller had no idea how much to
+  shave off. Now includes the limit (`"... (8MB)"`). Found live-testing
+  bundle upload with real seller content (a 9.8MB image).
 - **Vercel-hosted bundle pages were invisible to real visitors.** New Vercel
   projects inherit the team's default deployment protection
   (`ssoProtection`), so every bundle deployed via `target=vercel` 302-redirected

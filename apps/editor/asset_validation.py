@@ -293,7 +293,10 @@ def validate_bundle(files: list[BundleFile]) -> list[ValidatedAsset]:
         seen_casefold.add(casefold_path)
 
         if len(bundle_file.data) > MAX_BUNDLE_FILE_BYTES:
-            raise BundleValidationError("too_large", f"{path} exceeds the per-file size cap")
+            limit_mb = MAX_BUNDLE_FILE_BYTES // (1024 * 1024)
+            raise BundleValidationError(
+                "too_large", f"{path} exceeds the per-file size cap ({limit_mb}MB)"
+            )
 
         _reject_if_deploy_behavior_file(path)
 

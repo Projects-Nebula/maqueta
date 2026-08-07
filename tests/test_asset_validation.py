@@ -204,6 +204,8 @@ def test_single_file_cap_exceeded_rejected():
     with pytest.raises(BundleValidationError) as exc_info:
         validate_bundle(files)
     assert exc_info.value.code == "too_large"
+    limit_mb = MAX_BUNDLE_FILE_BYTES // (1024 * 1024)
+    assert f"{limit_mb}MB" in str(exc_info.value)
 
 
 def test_caps_checked_before_any_asset_content_is_processed(monkeypatch):
